@@ -35,7 +35,7 @@ public fun assertEditor(
   checkDiagnostics: Boolean = true,
   block: EditorExpectations.() -> Unit,
 ) {
-  EditorExpectations(observations, checkDiagnostics).apply(block).verify()
+  EditorExpectations(checkDiagnostics).apply(block).verify(observations)
 }
 
 private val diagnosticSnapshotting = textSnapshotting.pullback<List<EditorDiagnostic>> { diagnostics ->
@@ -45,7 +45,6 @@ private val diagnosticSnapshotting = textSnapshotting.pullback<List<EditorDiagno
 }
 
 public class EditorExpectations internal constructor(
-  private val observations: EditorObservations,
   private val checkDiagnostics: Boolean,
 ) {
   private val expectedDiagnostics = mutableListOf<ExpectedDiagnostic>()
@@ -74,9 +73,11 @@ public class EditorExpectations internal constructor(
     return ReferenceExpectation(expression).also(references::add)
   }
 
-  internal fun verify() {
+  internal fun requestedReferences(): Set<String> = references.mapTo(linkedSetOf()) { it.expression }
+
+  internal fun verify(observations: EditorObservations) {
     val failures = mutableListOf<String>()
-    if (checkDiagnostics) verifyDiagnostics(failures)
+    if (checkDiagnostics) verifyDiagnostics(observations, failures)
     for (expected in references) {
       val shouldResolve = expected.shouldResolve
       if (shouldResolve == null) {
@@ -92,7 +93,7 @@ public class EditorExpectations internal constructor(
     if (failures.isNotEmpty()) throw AssertionError(failures.joinToString("\n", prefix = "Editor assertions failed:\n"))
   }
 
-  private fun verifyDiagnostics(failures: MutableList<String>) {
+  private fun verifyDiagnostics(observations: EditorObservations, failures: MutableList<String>) {
     val actual = observations.diagnostics()
     val expectedSnapshot = expectedDiagnosticSnapshot
     if (expectedSnapshot != null) {

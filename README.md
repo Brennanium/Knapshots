@@ -12,7 +12,8 @@ intentionally small and independently testable:
   compiler host: success/failure, diagnostics, and version-aware named compiler-output snapshots.
   A K2/KCTFork/Gradle backend is not bundled yet.
 - `knapshots-editor` provides assertions over diagnostics and reference-resolution
-  observations from an IDE host. It does not yet start an IDE.
+  observations from an IDE host. It builds a complete source/observation request before opening
+  that host, but does not yet start an IDE itself.
 
 The planned `assertCompiler` and `assertEditor` source-driven integrations, Gradle
 plugin, and compatibility runner are not public APIs yet. This is deliberately a

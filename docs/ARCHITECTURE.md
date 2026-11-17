@@ -75,6 +75,9 @@ differences.
 This module describes assertions over a *prepared* editor:
 
 - `EditorObservations` supplies diagnostics and reference lookups.
+- `EditorRequest` carries named primary/additional source files, requested reference expressions,
+  and whether diagnostics must be captured. It deliberately carries no expectations: a host
+  reports observations and the caller performs assertions locally.
 - `ReferenceObservation` distinguishes `Resolved`, `Unresolved`, and `Unavailable`; an adapter
   failure may never masquerade as a legitimate unresolved reference.
 - `assertEditor` fails unexpected error diagnostics by default. Warnings are asserted only when
@@ -84,9 +87,10 @@ This module describes assertions over a *prepared* editor:
   and project lifecycle.
 
 The module currently does not launch an IDE, import Gradle, wait for indexing, or record editor
-snapshots. It only owns portable assertion semantics. A future source-driven
-`assertEditor(source = …)` should be backed by a temporary project/session runner, not by test
-fixtures hard-coded to one compiler plugin.
+snapshots. It owns portable assertion semantics and the source/observation request boundary. A
+future runner can implement `EditorSourceHost` by materializing an `EditorRequest` in a temporary
+project and returning the real observations. It must not be a test fixture hard-coded to one
+compiler plugin.
 
 ## Planned modules
 
