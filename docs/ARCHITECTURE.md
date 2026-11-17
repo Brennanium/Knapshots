@@ -107,10 +107,11 @@ The Gradle plugin should arrange compatible modules for a common workflow but mu
 independent APIs. It may launch the actual IDE and OS helpers such as Xvfb; using Gradle does not
 make those external processes disappear.
 
-`knapshots-ide-runner` currently contains the first two portable pieces: a versioned, Base64-safe
-properties transport (`EditorInspectionProtocol`) and a fresh Gradle-project materializer. The
-transport preserves three reference states and distinguishes an IDE failure from unavailable
-diagnostics. It does not launch a process or load an IntelliJ adapter yet.
+`knapshots-ide-runner` currently contains a versioned, Base64-safe properties transport
+(`EditorInspectionProtocol`), a fresh Gradle-project materializer, and a generic host/command
+lifecycle. The transport preserves three reference states and distinguishes an IDE failure from
+unavailable diagnostics. The host retains failed projects by default and records subprocess output
+inside them. It does not bundle Android Studio/KEFS resolution or an IntelliJ adapter yet.
 
 ## Test strategy
 
