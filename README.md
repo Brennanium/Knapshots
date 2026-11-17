@@ -8,8 +8,9 @@ intentionally small and independently testable:
 
 - `knapshots-snapshots` provides composable capture and comparison strategies, including an
   in-memory `assertSnapshot` assertion.
-- `knapshots-compiler` provides version-aware named compiler-output snapshots. It does
-  not yet compile source itself; integrations supply compiler captures.
+- `knapshots-compiler` provides source-driven `assertCompiler` assertions through a pluggable
+  compiler host: success/failure, diagnostics, and version-aware named compiler-output snapshots.
+  A K2/KCTFork/Gradle backend is not bundled yet.
 - `knapshots-editor` provides assertions over diagnostics and reference-resolution
   observations from an IDE host. It does not yet start an IDE.
 

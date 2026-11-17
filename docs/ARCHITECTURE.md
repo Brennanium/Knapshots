@@ -53,15 +53,18 @@ driver:
 - `SnapshotExpectation` supports a default capture and compiler-version-specific overrides.
 - Version selectors understand exact versions, `major.minor.*`, and bounded expressions such
   as `>=2.4.20 <2.5.0`. Exact selectors win. Ambiguous matching ranges fail.
-- `assertCompilerSnapshots` asks an integration for captures and compares each requested
-  capture.
+- `assertCompiler` supplies one or more source files to a pluggable `CompilerHost` and checks an
+  explicitly expected success/failure outcome, diagnostics, and requested captures. This gives
+  failure tests a real contract: a source that unexpectedly compiles successfully fails.
+- `assertCompilerSnapshots` remains a lower-level capture-only convenience for integrations that
+  already own source compilation.
 - `assertCompilerSnapshotFiles` supports deliberately opt-in, file-backed recording. When it
   writes snapshots it fails the test, requiring review and a rerun.
 
-The key missing public capability is a single source-driven `assertCompiler` API. It should
-model successful and unsuccessful compilations, diagnostics, FIR/IR/bytecode captures when
-available, and the fact that later phases may not exist after a failed compilation. Do not split
-ordinary compile-error tests into a separate `assertCompilation` library.
+`assertCompiler` now models successful and unsuccessful compilations, diagnostics, and optional
+FIR/IR/other named captures. A real compiler backend remains missing. Such a backend must report
+that later captures were unavailable after a failed compilation instead of fabricating them. Do
+not split ordinary compile-error tests into a separate `assertCompilation` library.
 
 The compiler module must stay backend-agnostic. A later K2/FIR, KCTFork, Gradle, or command-line
 adapter should own compiler setup, plugin classpaths, capture generation, and compiler-version
@@ -164,8 +167,8 @@ reference, not yet Knapshots’ generic request/result protocol.
 
 1. Finish the generic snapshot surface: assertion entry point, reusable failure rendering,
    explicit recording policy, and file/inline extension points.
-2. Generalize `assertCompiler` around a compilation result model. Retain version selector behavior
-   and add negative diagnostic tests before integrating a real compiler backend.
+2. Integrate `assertCompiler` with a real compiler backend while retaining its backend-neutral
+   result model, version selector behavior, and negative diagnostic tests.
 3. Extract the PSI inline recorder only after its call-shape assumptions are replaced by generic
    capture descriptors and its safety tests move with it.
 4. Define a request/result transport for `assertEditor`; then build a temporary project host and
