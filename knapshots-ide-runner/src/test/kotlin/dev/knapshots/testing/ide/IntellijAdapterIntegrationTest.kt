@@ -25,6 +25,16 @@ class IntellijAdapterIntegrationTest {
       javaHome.resolve("bin/java").toFile().canExecute(),
       "The current smoke test supports an Android Studio macOS bundle.",
     )
+    val sdk = sequenceOf(
+      System.getenv("ANDROID_HOME"),
+      System.getenv("ANDROID_SDK_ROOT"),
+      System.getProperty("user.home") + "/Library/Android/sdk",
+    )
+      .filterNotNull()
+      .map(Path::of)
+      .firstOrNull(Files::isDirectory)
+    assumeTrue(sdk != null, "Set ANDROID_HOME or ANDROID_SDK_ROOT to an installed Android SDK.")
+
     val template = EditorProjectTemplate(
       settingsGradleKts = """
         pluginManagement { repositories { gradlePluginPortal(); mavenCentral() } }
@@ -35,12 +45,16 @@ class IntellijAdapterIntegrationTest {
         plugins { kotlin("jvm") version "2.4.21" }
         repositories { mavenCentral() }
       """.trimIndent(),
+      additionalFiles = mapOf(
+        "local.properties" to "sdk.dir=${propertiesPath(checkNotNull(sdk).toRealPath())}\n",
+      ),
     )
     val launcher = CommandEditorProcessLauncher(
       command = { project ->
         listOf(
           repository.resolve("gradlew").toString(),
           "--no-daemon",
+          "--no-configuration-cache",
           "-p",
           repository.toString(),
           "-Pknapshots.enableIntellijAdapter",
@@ -78,4 +92,12 @@ class IntellijAdapterIntegrationTest {
       reference("Values.number").resolves()
     }
   }
+
+  private fun propertiesPath(path: Path): String = path.toString()
+    .replace("\\", "\\\\")
+    .replace(":", "\\:")
+    .replace("=", "\\=")
+    .replace("#", "\\#")
+    .replace("!", "\\!")
+    .replace(" ", "\\ ")
 }

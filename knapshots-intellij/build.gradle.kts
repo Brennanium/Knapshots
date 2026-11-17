@@ -58,6 +58,7 @@ intellijPlatform {
 }
 
 tasks.runIde {
+  notCompatibleWithConfigurationCache("launches an external IDE with a fresh inspection sandbox")
   val inspectedProject = providers.gradleProperty("knapshots.editor.project").orNull
   val request = providers.gradleProperty("knapshots.editor.request").orNull
   val response = providers.gradleProperty("knapshots.editor.response").orNull
