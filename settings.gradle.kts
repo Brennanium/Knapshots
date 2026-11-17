@@ -18,4 +18,5 @@ include(
   ":knapshots-snapshots",
   ":knapshots-compiler",
   ":knapshots-editor",
+  ":knapshots-ide-runner",
 )

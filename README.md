@@ -14,6 +14,8 @@ intentionally small and independently testable:
 - `knapshots-editor` provides assertions over diagnostics and reference-resolution
   observations from an IDE host. It builds a complete source/observation request before opening
   that host, but does not yet start an IDE itself.
+- `knapshots-ide-runner` materializes fresh Gradle projects and carries versioned requests/results
+  between a runner and an IDE-side adapter. It does not launch an IDE yet.
 
 The planned `assertCompiler` and `assertEditor` source-driven integrations, Gradle
 plugin, and compatibility runner are not public APIs yet. This is deliberately a

@@ -16,7 +16,16 @@ public data class EditorRequest(
   val sources: List<EditorSource>,
   val referenceExpressions: Set<String>,
   val captureDiagnostics: Boolean,
-)
+) {
+  init {
+    require(sources.isNotEmpty()) { "At least one editor source is required." }
+    require(sources.all { it.fileName.isNotBlank() }) { "An editor source file name must not be blank." }
+    require(sources.map { it.fileName }.distinct().size == sources.size) {
+      "Every editor source file must have a unique file name."
+    }
+    require(referenceExpressions.none { it.isBlank() }) { "A requested reference expression must not be blank." }
+  }
+}
 
 /** Opens a prepared source request in an editor environment and returns actual observations. */
 public fun interface EditorSourceHost {
@@ -42,9 +51,6 @@ public fun assertEditor(
   val sources = listOf(EditorSource(fileName, source.trimIndent())) + additionalSources.map { sourceFile ->
     require(sourceFile.fileName.isNotBlank()) { "An additional source file name must not be blank." }
     sourceFile.copy(text = sourceFile.text.trimIndent())
-  }
-  require(sources.map { it.fileName }.distinct().size == sources.size) {
-    "Every editor source file must have a unique file name."
   }
   val expectations = EditorExpectations(checkDiagnostics).apply(block)
   val observations = host.open(
