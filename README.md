@@ -31,13 +31,29 @@ To compile it against a selected IDE, provide its installation path explicitly:
 
 ```shell
 ./gradlew \
+  -Pkotlin.daemon.jvmargs="-Xmx2g" \
   -Pknapshots.enableIntellijAdapter \
   -Pknapshots.idePath="/path/to/Android Studio.app" \
   :knapshots-intellij:build
 ```
 
 This only compiles the adapter; it does not yet configure a user project, install the adapter,
-or launch an imported-project assertion.
+or launch an imported-project assertion. Its `runIde` task accepts the generated project and
+protocol paths, but a polished Gradle-facing setup for library consumers is still pending.
+
+The repository includes one deliberately opt-in imported-project smoke test for the adapter. It
+uses a disposable IDE sandbox, pre-trusts only its generated project, and pre-seeds Android
+Studio's first-run/analytics preferences so CI never needs to answer a trust or consent dialog:
+
+```shell
+./gradlew \
+  -Pkotlin.daemon.jvmargs="-Xmx2g" \
+  -Pknapshots.enableIntellijAdapter \
+  -Pknapshots.idePath="/path/to/Android Studio.app" \
+  -Pknapshots.includeIdeIntegration \
+  :knapshots-ide-runner:test \
+  --tests '*IntellijAdapterIntegrationTest'
+```
 
 ## Build
 

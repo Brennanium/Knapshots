@@ -10,5 +10,13 @@ dependencies {
 }
 
 tasks.test {
-  useJUnitPlatform()
+  useJUnitPlatform {
+    if (!providers.gradleProperty("knapshots.includeIdeIntegration").isPresent) {
+      excludeTags("ide-integration")
+    }
+  }
+  systemProperty("knapshots.projectDir", rootProject.projectDir.absolutePath)
+  providers.gradleProperty("knapshots.idePath").orNull?.let {
+    systemProperty("knapshots.idePath", it)
+  }
 }

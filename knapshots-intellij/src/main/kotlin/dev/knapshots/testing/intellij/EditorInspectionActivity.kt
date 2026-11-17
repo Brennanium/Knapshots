@@ -3,6 +3,7 @@ package dev.knapshots.testing.intellij
 import com.intellij.codeInsight.daemon.impl.DaemonCodeAnalyzerEx
 import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -32,11 +33,18 @@ import java.nio.file.Path
  */
 public class EditorInspectionActivity : ProjectActivity {
   override suspend fun execute(project: Project) {
-    val requestPath = System.getenv("KNAPSHOTS_EDITOR_REQUEST")?.let(Path::of) ?: return
-    val responsePath = System.getenv("KNAPSHOTS_EDITOR_RESPONSE")?.let(Path::of) ?: return
-    val expectedProject = System.getenv("KNAPSHOTS_EDITOR_PROJECT")?.let(Path::of) ?: return
-    val projectPath = project.basePath?.let(Path::of) ?: return
-    if (!samePath(projectPath, expectedProject)) return
+    val requestPath = setting("KNAPSHOTS_EDITOR_REQUEST", "knapshots.editor.request")?.let(Path::of)
+      ?: return logIgnored(project, "missing inspection request setting")
+    val responsePath = setting("KNAPSHOTS_EDITOR_RESPONSE", "knapshots.editor.response")?.let(Path::of)
+      ?: return logIgnored(project, "missing inspection response setting")
+    val expectedProject = setting("KNAPSHOTS_EDITOR_PROJECT", "knapshots.editor.project")?.let(Path::of)
+      ?: return logIgnored(project, "missing inspected-project setting")
+    val projectPath = project.basePath?.let(Path::of)
+      ?: return logIgnored(project, "project has no base path")
+    if (!samePath(projectPath, expectedProject)) {
+      return logIgnored(project, "opened project does not match $expectedProject")
+    }
+    logger.info("Starting Knapshots inspection for $projectPath")
 
     val request = try {
       EditorInspectionProtocol.readRequest(requestPath)
@@ -86,16 +94,25 @@ public class EditorInspectionActivity : ProjectActivity {
         continue
       }
       when (val attempt = inspectWhenReady(project, sourcePaths, request)) {
-        is InspectionAttempt.Pending -> lastPending = attempt.reason
+        is InspectionAttempt.Pending -> if (lastPending != attempt.reason) {
+          lastPending = attempt.reason
+          logger.info("Knapshots inspection for $projectDirectory: $lastPending")
+        }
         is InspectionAttempt.Completed -> {
+          logger.info("Knapshots inspection completed for $projectDirectory")
           writeAndExit(responsePath, attempt.response)
           return
         }
       }
     }
+    logger.warn("Knapshots inspection timed out for $projectDirectory: $lastPending")
     writeAndExit(responsePath, EditorInspectionResponse.Failed("IDE inspection timed out: $lastPending"))
   }
 
+  // The selected Android Studio platform still exposes this synchronous read helper. Keep the
+  // adapter's platform-specific compatibility point isolated until the newer API is available
+  // across the supported IDE range.
+  @Suppress("DEPRECATION")
   private fun inspectWhenReady(
     project: Project,
     sourcePaths: List<Path>,
@@ -174,6 +191,13 @@ public class EditorInspectionActivity : ProjectActivity {
     left.toAbsolutePath().normalize() == right.toAbsolutePath().normalize()
   }
 
+  private fun setting(environment: String, property: String): String? =
+    System.getenv(environment) ?: System.getProperty(property)
+
+  private fun logIgnored(project: Project, reason: String) {
+    logger.info("Ignoring project '${project.basePath}' for Knapshots inspection: $reason")
+  }
+
   private fun writeAndExit(path: Path, response: EditorInspectionResponse) {
     try {
       EditorInspectionProtocol.writeResponse(response, path)
@@ -195,6 +219,7 @@ public class EditorInspectionActivity : ProjectActivity {
   }
 
   private companion object {
+    val logger: Logger = Logger.getInstance(EditorInspectionActivity::class.java)
     const val POLL_INTERVAL_MILLIS: Long = 2_000
     const val READY_TIMEOUT_MILLIS: Long = 10 * 60 * 1_000
   }

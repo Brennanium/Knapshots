@@ -116,16 +116,19 @@ inside them. It does not bundle Android Studio/KEFS resolution.
 `knapshots-intellij` is an experimental opt-in adapter. A `ProjectActivity` reads the generic
 request from environment-provided paths, waits for indexing and (when requested) highlighting,
 collects diagnostics and exact source-expression reference results, writes a protocol response,
-and exits. It compiles against the selected local IDE and is intentionally excluded from ordinary
-`check` tasks. It still needs a real launched-IDE integration test, Android Studio/KEFS sandbox
-configuration, and a Gradle-facing user setup before it can be called supported.
+and exits. Its `runIde` task receives the project as its normal application argument and the
+protocol paths as Gradle properties. Before the IDE starts, it creates a sandbox-owned trusted
+paths file for that one generated project and sandbox-owned Android Studio consent/analytics
+preferences. An imported-project CI run therefore must not rely on a developer clicking trust or
+first-run dialogs. It compiles against the selected local IDE and is intentionally excluded from
+ordinary `check` tasks. It has a deliberately opt-in launched-IDE smoke test, but still needs
+successful evidence across Android Studio/KEFS configurations and a Gradle-facing user setup
+before it can be called supported.
 
-`knapshots-intellij` is now an experimental opt-in adapter. A `ProjectActivity` reads the generic
-request from environment-provided paths, waits for indexing and (when requested) highlighting,
-collects diagnostics and exact source-expression reference results, writes a protocol response,
-and exits. It compiles against the selected local IDE and is intentionally excluded from ordinary
-`check` tasks. It still needs a real launched-IDE integration test, Android Studio/KEFS sandbox
-configuration, and a Gradle-facing user setup before it can be called supported.
+There is an intentionally opt-in macOS Android Studio smoke test in `knapshots-ide-runner`. It
+materializes a plain Kotlin project, launches the adapter through `runIde`, and checks a resolved
+reference through `assertEditor`. It is tagged `ide-integration` and excluded from normal builds;
+this is the first real integration boundary, not yet a compatibility matrix.
 
 ## Test strategy
 
