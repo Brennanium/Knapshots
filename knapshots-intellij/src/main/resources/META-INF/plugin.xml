@@ -1,0 +1,13 @@
+<idea-plugin>
+  <id>dev.knapshots.intellij</id>
+  <name>Knapshots Editor Adapter</name>
+  <vendor>Brennanium</vendor>
+  <depends>com.intellij.modules.platform</depends>
+  <depends>org.jetbrains.kotlin</depends>
+  <extensions defaultExtensionNs="com.intellij">
+    <postStartupActivity implementation="dev.knapshots.testing.intellij.EditorInspectionActivity"/>
+  </extensions>
+  <extensions defaultExtensionNs="org.jetbrains.kotlin">
+    <supportsKotlinPluginMode supportsK2="true" supportsK1="false"/>
+  </extensions>
+</idea-plugin>

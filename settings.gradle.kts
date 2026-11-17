@@ -6,7 +6,9 @@ pluginManagement {
 }
 
 dependencyResolutionManagement {
-  repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+  // The opt-in IntelliJ adapter registers the selected local IDE as a repository through the
+  // IntelliJ Platform Gradle plugin. Its metadata rule cannot be declared from settings.
+  repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
   repositories {
     mavenCentral()
   }
@@ -20,3 +22,9 @@ include(
   ":knapshots-editor",
   ":knapshots-ide-runner",
 )
+
+// This module compiles against a selected local IDE installation. Keep it opt-in so normal
+// snapshot/compiler/editor verification remains portable and does not require Android Studio.
+if (providers.gradleProperty("knapshots.enableIntellijAdapter").isPresent) {
+  include(":knapshots-intellij")
+}

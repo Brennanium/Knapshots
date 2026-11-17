@@ -23,6 +23,22 @@ plugin, and compatibility runner are not public APIs yet. This is deliberately a
 fresh repository: KPaths continues to use its local copies until this library has a
 complete, verified release.
 
+The experimental `knapshots-intellij` adapter is intentionally opt-in because it compiles against
+the exact APIs of a locally selected IntelliJ-based IDE. It is excluded from normal verification;
+see the architecture roadmap before enabling it.
+
+To compile it against a selected IDE, provide its installation path explicitly:
+
+```shell
+./gradlew \
+  -Pknapshots.enableIntellijAdapter \
+  -Pknapshots.idePath="/path/to/Android Studio.app" \
+  :knapshots-intellij:build
+```
+
+This only compiles the adapter; it does not yet configure a user project, install the adapter,
+or launch an imported-project assertion.
+
 ## Build
 
 Use a supported JDK (currently JDK 17 or newer) and run:

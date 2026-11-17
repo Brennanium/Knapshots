@@ -111,7 +111,21 @@ make those external processes disappear.
 (`EditorInspectionProtocol`), a fresh Gradle-project materializer, and a generic host/command
 lifecycle. The transport preserves three reference states and distinguishes an IDE failure from
 unavailable diagnostics. The host retains failed projects by default and records subprocess output
-inside them. It does not bundle Android Studio/KEFS resolution or an IntelliJ adapter yet.
+inside them. It does not bundle Android Studio/KEFS resolution.
+
+`knapshots-intellij` is an experimental opt-in adapter. A `ProjectActivity` reads the generic
+request from environment-provided paths, waits for indexing and (when requested) highlighting,
+collects diagnostics and exact source-expression reference results, writes a protocol response,
+and exits. It compiles against the selected local IDE and is intentionally excluded from ordinary
+`check` tasks. It still needs a real launched-IDE integration test, Android Studio/KEFS sandbox
+configuration, and a Gradle-facing user setup before it can be called supported.
+
+`knapshots-intellij` is now an experimental opt-in adapter. A `ProjectActivity` reads the generic
+request from environment-provided paths, waits for indexing and (when requested) highlighting,
+collects diagnostics and exact source-expression reference results, writes a protocol response,
+and exits. It compiles against the selected local IDE and is intentionally excluded from ordinary
+`check` tasks. It still needs a real launched-IDE integration test, Android Studio/KEFS sandbox
+configuration, and a Gradle-facing user setup before it can be called supported.
 
 ## Test strategy
 
@@ -181,8 +195,8 @@ reference, not yet Knapshots’ generic request/result protocol.
    result model, version selector behavior, and negative diagnostic tests.
 3. Extract the PSI inline recorder only after its call-shape assumptions are replaced by generic
    capture descriptors and its safety tests move with it.
-4. Define a request/result transport for `assertEditor`; then build a temporary project host and
-   one real IDE adapter with readiness, timeout, cleanup, and logs.
+4. Test the existing request/result transport, temporary project host, and IntelliJ adapter in a
+   launched imported project. Add deterministic readiness, timeout, cleanup, and log contracts.
 5. Add a Gradle plugin/runner around the working APIs. Port compatibility orchestration gradually;
    keep any existing script implementation as a reference until independent JVM parity exists.
 
