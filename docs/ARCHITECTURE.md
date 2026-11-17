@@ -38,9 +38,9 @@ The base module is intentionally tiny:
 - `compareSnapshot` captures exactly once and returns a structured mismatch.
 - `textSnapshotting` is exact text comparison.
 
-There is **not yet** a public `assertSnapshot`, filesystem snapshot convention, image
-strategy, diff renderer, or inline recorder. Those should be designed here rather than
-copied as compiler-specific behavior.
+`assertSnapshot` is deliberately in-memory: it cannot change a test's expectations. A filesystem
+snapshot convention, image strategy, richer diff renderer, and inline recorder remain to be
+designed here rather than copied as compiler-specific behavior.
 
 ### `knapshots-compiler`
 

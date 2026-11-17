@@ -1,7 +1,9 @@
 package dev.knapshots.testing.snapshot
 
 import org.junit.jupiter.api.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
@@ -22,5 +24,15 @@ class SnapshottingTest {
     }) { value -> captures++; value * 2 }
     assertEquals("different numbers", compareSnapshot(2, 3, strategy)?.message)
     assertEquals(1, captures)
+  }
+
+  @Test fun `assertion uses the strategy and renders a useful failure`() {
+    val failure = assertFailsWith<AssertionError> {
+      assertSnapshot("actual", "expected", textSnapshotting, name = "profile")
+    }
+
+    assertContains(failure.message.orEmpty(), "Snapshot 'profile' differs")
+    assertContains(failure.message.orEmpty(), "Expected:\nexpected")
+    assertContains(failure.message.orEmpty(), "Actual:\nactual")
   }
 }

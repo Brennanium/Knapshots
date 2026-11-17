@@ -32,6 +32,27 @@ public fun <Value, Format> compareSnapshot(
   return SnapshotDifference(expected, actual, message)
 }
 
+/**
+ * Captures [value] once and fails when it differs from [expected].
+ *
+ * This is the in-memory assertion primitive. File-backed and inline snapshot storage belong to
+ * higher-level recorders so ordinary assertions never mutate a test's expectations.
+ */
+public fun <Value, Format> assertSnapshot(
+  value: Value,
+  expected: Format,
+  using: Snapshotting<Value, Format>,
+  name: String? = null,
+) {
+  val difference = compareSnapshot(value, expected, using) ?: return
+  val label = name?.let { " '$it'" }.orEmpty()
+  throw AssertionError(
+    "Snapshot$label differs: ${difference.message}\n" +
+      "Expected:\n${difference.expected}\n" +
+      "Actual:\n${difference.actual}",
+  )
+}
+
 /** Exact text comparison; callers choose how to normalize and render their output. */
 public val textSnapshotting: Snapshotting<String, String> = Snapshotting(
   diffing = Diffing { expected, actual -> if (expected == actual) null else "Text snapshots differ" },

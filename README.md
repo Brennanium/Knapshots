@@ -6,7 +6,8 @@ verification, and real IDE assertions.
 This repository is in its first extraction pass from KPaths. The initial modules are
 intentionally small and independently testable:
 
-- `knapshots-snapshots` provides composable capture and comparison strategies.
+- `knapshots-snapshots` provides composable capture and comparison strategies, including an
+  in-memory `assertSnapshot` assertion.
 - `knapshots-compiler` provides version-aware named compiler-output snapshots. It does
   not yet compile source itself; integrations supply compiler captures.
 - `knapshots-editor` provides assertions over diagnostics and reference-resolution
