@@ -91,6 +91,8 @@ The failure paths are relative to the temporary inspection directory.
 
 ## Editor assertions in JUnit
 
+For the roles of Gradle, compiler, and IDE plugins, see [Testing compiler plugins](PLUGIN-TESTING.md).
+
 Add `knapshots-editor-junit` and `knapshots-ide-runner` to the test dependencies. The compatibility
 plugin enables JUnit extension discovery; tests can then call `assertEditor(source) { ... }`
 without an annotation or host argument. Configure the temporary project's plugin and dependencies

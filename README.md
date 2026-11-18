@@ -3,6 +3,9 @@
 Knapshots is a Kotlin testing toolkit for snapshot assertions, compiler-plugin
 verification, and real IDE assertions.
 
+See [Testing compiler plugins](docs/PLUGIN-TESTING.md) for the roles of Gradle, compiler, and IDE
+plugins and what each assertion needs.
+
 This repository is in its first extraction pass from KPaths. The initial modules are
 intentionally small and independently testable:
 
@@ -15,8 +18,8 @@ intentionally small and independently testable:
   observations from an IDE host. It builds a complete source/observation request before opening
   that host, but does not yet start an IDE itself.
 - `knapshots-ide-runner` materializes fresh Gradle projects and carries versioned requests/results
-  between a runner and an IDE-side adapter. It can launch a caller-supplied command with timeout,
-  logs, and isolated-project lifecycle, but does not bundle an IDE-specific launcher yet.
+  between a runner and an IDE-side adapter. It can launch an IDE in an isolated sandbox, including
+  with a packaged adapter, and collect inspection logs.
 
 The planned `assertCompiler` and `assertEditor` source-driven integrations, Gradle
 plugin, and compatibility runner are not public APIs yet. This is deliberately a
@@ -37,9 +40,8 @@ To compile it against a selected IDE, provide its installation path explicitly:
   :knapshots-intellij:build
 ```
 
-This only compiles the adapter; it does not yet configure a user project, install the adapter,
-or launch an imported-project assertion. Its `runIde` task accepts the generated project and
-protocol paths, but a polished Gradle-facing setup for library consumers is still pending.
+This command only compiles the adapter. The experimental runner can package and launch it for
+imported-project assertions; a polished Gradle-facing setup for library consumers is still pending.
 
 The repository includes one deliberately opt-in imported-project smoke test for the adapter. It
 uses a disposable IDE sandbox, pre-trusts only its generated project, and pre-seeds Android
