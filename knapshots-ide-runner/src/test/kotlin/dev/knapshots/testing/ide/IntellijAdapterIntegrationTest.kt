@@ -20,11 +20,9 @@ class IntellijAdapterIntegrationTest {
     assumeTrue(configuredIde != null, "Set -Pknapshots.idePath to run the IntelliJ adapter integration test.")
     val ide = checkNotNull(configuredIde)
 
-    val javaHome = ide.resolve("Contents/jbr/Contents/Home")
-    assumeTrue(
-      javaHome.resolve("bin/java").toFile().canExecute(),
-      "The current smoke test supports an Android Studio macOS bundle.",
-    )
+    val javaHome = sequenceOf(ide.resolve("Contents/jbr/Contents/Home"), ide.resolve("jbr"))
+      .firstOrNull { it.resolve("bin/java").toFile().canExecute() }
+    requireNotNull(javaHome) { "Android Studio has no executable bundled JBR: $ide" }
     val sdk = sequenceOf(
       System.getenv("ANDROID_HOME"),
       System.getenv("ANDROID_SDK_ROOT"),
@@ -33,7 +31,7 @@ class IntellijAdapterIntegrationTest {
       .filterNotNull()
       .map(Path::of)
       .firstOrNull(Files::isDirectory)
-    assumeTrue(sdk != null, "Set ANDROID_HOME or ANDROID_SDK_ROOT to an installed Android SDK.")
+    requireNotNull(sdk) { "Set ANDROID_HOME or ANDROID_SDK_ROOT to an installed Android SDK." }
 
     val template = EditorProjectTemplate(
       settingsGradleKts = """
