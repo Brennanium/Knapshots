@@ -1,3 +1,5 @@
+import java.nio.file.Path
+
 plugins {
   alias(libs.plugins.kotlin.jvm)
   alias(libs.plugins.intellij.platform)
@@ -12,7 +14,14 @@ private fun String.xmlAttribute(): String =
 private fun trustProject(configDirectory: File, projectDirectory: File) {
   val trustedPaths = configDirectory.resolve("options/trusted-paths.xml")
   trustedPaths.parentFile.mkdirs()
-  val path = projectDirectory.toPath().toRealPath().toString().xmlAttribute()
+  val absolute = projectDirectory.toPath().toAbsolutePath().normalize()
+  val resolved = absolute.toRealPath()
+  val paths = linkedSetOf(absolute, resolved)
+  if (System.getProperty("os.name").startsWith("Mac", ignoreCase = true) && resolved.toString().startsWith("/private/var/")) {
+    val alias = Path.of(resolved.toString().removePrefix("/private"))
+    if (runCatching { alias.toRealPath() == resolved }.getOrDefault(false)) paths.add(alias)
+  }
+  val entries = paths.joinToString("\n") { "<entry key=\"${it.toString().xmlAttribute()}\" value=\"true\" />" }
   trustedPaths.writeText(
     """
       <?xml version="1.0" encoding="UTF-8"?>
@@ -20,7 +29,7 @@ private fun trustProject(configDirectory: File, projectDirectory: File) {
         <component name="Trusted.Paths">
           <option name="TRUSTED_PROJECT_PATHS">
             <map>
-              <entry key="$path" value="true" />
+              $entries
             </map>
           </option>
         </component>

@@ -54,6 +54,20 @@ class RunnerEditorSourceHostTest {
     assertFalse(Files.exists(checkNotNull(generatedRoot)))
   }
 
+  @Test fun `materializes projects under the canonical temporary parent`(@TempDir directory: Path) {
+    val realParent = Files.createDirectories(directory.resolve("real"))
+    val alias = Files.createSymbolicLink(directory.resolve("alias"), realParent)
+    val host = RunnerEditorSourceHost(template, EditorProcessLauncher { project ->
+      assertTrue(project.directory.startsWith(realParent.toRealPath()))
+      assertEquals(project.directory, project.directory.toRealPath())
+      EditorInspectionProtocol.writeResponse(
+        EditorInspectionResponse.Completed(null, mapOf("Example" to ReferenceObservation.Resolved())), project.responsePath,
+      )
+      EditorProcessResult(0)
+    }, temporaryParent = alias)
+    (host.open(request) as EditorObservationSession).complete(true)
+  }
+
   @Test fun `retains a failed project and reports the process summary`(@TempDir directory: Path) {
     var projectDirectory: Path? = null
     val host = RunnerEditorSourceHost(

@@ -35,7 +35,10 @@ public class DirectIdeProcessLauncher(
     }
     fun xml(value: String) = value.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;").replace(">", "&gt;")
     val options = Files.createDirectories(config.resolve("options"))
-    Files.writeString(options.resolve("trusted-paths.xml"), """<application><component name="Trusted.Paths"><option name="TRUSTED_PROJECT_PATHS"><map><entry key="${xml(project.directory.toRealPath().toString())}" value="true" /></map></option></component></application>""")
+    val trustedEntries = trustedProjectPaths(project.directory).joinToString("") { path ->
+      "<entry key=\"${xml(path.toString())}\" value=\"true\" />"
+    }
+    Files.writeString(options.resolve("trusted-paths.xml"), """<application><component name="Trusted.Paths"><option name="TRUSTED_PROJECT_PATHS"><map>$trustedEntries</map></option></component></application>""")
     Files.writeString(common.resolve("consentOptions/accepted"), "rsch.send.usage.stat:1.0:0:${System.currentTimeMillis()}")
     val analytics = """{"userId":"00000000-0000-0000-0000-000000000000","hasOptedIn":true,"debugDisablePublishing":true,"saltSkew":-1,"lastOptinPromptVersion":"9999.9999"}"""
     Files.writeString(android.resolve("analytics.settings"), analytics)
@@ -63,4 +66,19 @@ public class DirectIdeProcessLauncher(
       environment = mapOf("STUDIO_VM_OPTIONS" to vmOptions.toString()),
     ).launch(project)
   }
+}
+
+/** Trust only alternate spellings that resolve to this exact project directory. */
+internal fun trustedProjectPaths(project: Path): Set<Path> {
+  val absolute = project.toAbsolutePath().normalize()
+  val resolved = absolute.toRealPath()
+  val result = linkedSetOf(absolute, resolved)
+  if (System.getProperty("os.name").startsWith("Mac", ignoreCase = true)) {
+    val text = resolved.toString()
+    if (text.startsWith("/private/var/")) {
+      val alias = Path.of(text.removePrefix("/private"))
+      if (runCatching { alias.toRealPath() == resolved }.getOrDefault(false)) result.add(alias)
+    }
+  }
+  return result
 }

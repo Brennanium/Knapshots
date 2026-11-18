@@ -68,7 +68,9 @@ public class RunnerEditorSourceHost(
   override fun open(request: EditorRequest): EditorObservations {
     val parent = temporaryParent ?: Path.of(System.getProperty("java.io.tmpdir"))
     Files.createDirectories(parent)
-    val temporaryDirectory = Files.createTempDirectory(parent, "knapshots-editor-")
+    // Keep the IDE, Gradle, and VFS on the same canonical spelling on platforms with
+    // symlinked temporary directories (for example /var -> /private/var on macOS).
+    val temporaryDirectory = Files.createTempDirectory(parent.toRealPath(), "knapshots-editor-")
     var returnedSession = false
     try {
       val project = EditorProjectMaterializer().materialize(temporaryDirectory.resolve("project"), template, request)

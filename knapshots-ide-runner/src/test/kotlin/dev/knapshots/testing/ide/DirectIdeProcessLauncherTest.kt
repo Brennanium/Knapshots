@@ -36,6 +36,15 @@ class DirectIdeProcessLauncherTest {
     assertTrue(Files.readString(sandbox.resolve("studio.vmoptions")).contains("-Dknapshots.editor.project=$project"))
   }
 
+  @Test fun `trusts both the original project path and its resolved alias`(@TempDir directory: Path) {
+    val real = Files.createDirectories(directory.resolve("real/project"))
+    val link = Files.createSymbolicLink(directory.resolve("alias"), real.parent)
+    val throughLink = link.resolve("project")
+    assertTrue(throughLink in trustedProjectPaths(throughLink))
+    assertTrue(real.toRealPath() in trustedProjectPaths(throughLink))
+    assertTrue(trustedProjectPaths(throughLink).all { it.toRealPath() == real.toRealPath() })
+  }
+
   @Test fun `rejects archive paths outside sandbox`(@TempDir directory: Path) {
     val archive = directory.resolve("bad.zip").also { archive(it, "../escaped") }
     val project = Files.createDirectories(directory.resolve("inspection/project"))
