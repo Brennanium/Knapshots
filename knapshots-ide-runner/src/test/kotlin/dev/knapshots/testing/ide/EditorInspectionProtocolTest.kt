@@ -73,4 +73,13 @@ class EditorInspectionProtocolTest {
     Files.writeString(path, Files.readString(path).lineSequence().filterNot { it.startsWith("readinessReferences=") }.joinToString("\n"))
     assertFailsWith<IllegalArgumentException> { EditorInspectionProtocol.readRequest(path) }
   }
+
+  @Test fun `old protocol versions are rejected rather than losing readiness semantics`(@TempDir directory: Path) {
+    val path = directory.resolve("old.properties")
+    val request = EditorRequest(listOf(EditorSource("Example.kt", "class Example")), emptySet(), false,
+      readinessReferences = setOf("Example.generated"))
+    EditorInspectionProtocol.writeRequest(request, path)
+    Files.writeString(path, Files.readString(path).replace("version=${EditorInspectionProtocol.VERSION}", "version=1"))
+    assertFailsWith<IllegalArgumentException> { EditorInspectionProtocol.readRequest(path) }
+  }
 }
