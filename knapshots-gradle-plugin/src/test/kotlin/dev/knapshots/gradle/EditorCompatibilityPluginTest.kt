@@ -9,6 +9,27 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 
 class EditorCompatibilityPluginTest {
+  @Test fun `infers a sole declared plugin but avoids guessing among several`(@TempDir dir: Path) {
+    Files.writeString(dir.resolve("settings.gradle.kts"), "rootProject.name = \"consumer\"")
+    fun build(extra: String, assertion: String) {
+      Files.writeString(dir.resolve("build.gradle.kts"), """
+        plugins { `java-gradle-plugin`; id("dev.knapshots.compatibility") }
+        gradlePlugin { plugins {
+          create("first") { id = "example.first"; implementationClass = "example.Plugin" }
+          $extra
+        } }
+        tasks.register("inspectPlugin") { doLast {
+          val args = tasks.named<Test>("test").get().jvmArgumentProviders.flatMap { it.asArguments() }
+          $assertion
+        } }
+      """.trimIndent())
+      GradleRunner.create().withProjectDir(dir.toFile()).withPluginClasspath().withArguments("inspectPlugin").build()
+    }
+    build("", "check(\"-Dknapshots.editor.pluginId=example.first\" in args)")
+    build("create(\"second\") { id = \"example.second\"; implementationClass = \"example.Other\" }",
+      "check(args.none { it.startsWith(\"-Dknapshots.editor.pluginId=\") })")
+  }
+
   @Test fun `enables editor extension discovery for JUnit test tasks`(@TempDir dir: Path) {
     Files.writeString(dir.resolve("settings.gradle.kts"), "rootProject.name = \"consumer\"")
     Files.writeString(dir.resolve("runtime.jar"), "placeholder")
@@ -19,8 +40,8 @@ class EditorCompatibilityPluginTest {
       version = "3.4.5"
       val fixture = layout.projectDirectory.file("runtime.jar")
       tasks.named<Test>("test") { classpath = files(fixture) }
-      knapshotsEditor {
-        pluginId.set("example.plugin")
+      knapshots {
+        plugin { id.set("example.plugin") }
         dependencies.add("example:library:1")
       }
       tasks.register("inspectTestConfiguration") {

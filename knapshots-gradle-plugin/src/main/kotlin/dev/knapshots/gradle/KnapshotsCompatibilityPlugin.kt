@@ -19,6 +19,7 @@ import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.testing.Test
 import org.gradle.api.artifacts.VersionCatalogsExtension
+import org.gradle.plugin.devel.GradlePluginDevelopmentExtension
 import org.gradle.api.tasks.options.Option
 import org.gradle.work.DisableCachingByDefault
 import java.nio.file.Files
@@ -41,9 +42,13 @@ public abstract class CompatibilityExtension {
 
 public class KnapshotsCompatibilityPlugin : Plugin<Project> {
   override fun apply(project: Project) {
-    val editorProject = project.extensions.create("knapshotsEditor", EditorProjectExtension::class.java)
+    val editorProject = project.extensions.create("knapshots", KnapshotsExtension::class.java)
+    editorProject.plugin.id.convention(project.provider {
+      project.extensions.findByType(GradlePluginDevelopmentExtension::class.java)
+        ?.plugins?.mapNotNull { it.id?.takeIf(String::isNotBlank) }?.singleOrNull()
+    })
     editorProject.wrapperRoot.convention(project.rootProject.layout.projectDirectory)
-    editorProject.pluginVersion.convention(project.provider { project.version.toString().takeUnless { it == "unspecified" } })
+    editorProject.plugin.version.convention(project.provider { project.version.toString().takeUnless { it == "unspecified" } })
     editorProject.kotlinVersion.convention(project.provider {
       project.extensions.findByType(VersionCatalogsExtension::class.java)?.find("libs")?.orElse(null)
         ?.findVersion("kotlin")?.orElse(null)?.requiredVersion?.takeIf(String::isNotBlank)
@@ -52,9 +57,9 @@ public class KnapshotsCompatibilityPlugin : Plugin<Project> {
     editorProject.idePath.convention(project.layout.dir(
       project.providers.gradleProperty("knapshots.idePath").orElse(project.providers.environmentVariable("KNAPSHOTS_IDE_PATH")).map(project::file),
     ))
-    editorProject.kefsArchive.convention(project.layout.file(project.providers.environmentVariable("KNAPSHOTS_KEFS_ARCHIVE").map(project::file)))
+    editorProject.kefs.archive.convention(project.layout.file(project.providers.environmentVariable("KNAPSHOTS_KEFS_ARCHIVE").map(project::file)))
     editorProject.adapterArchive.convention(project.layout.file(project.providers.environmentVariable("KNAPSHOTS_IDE_ADAPTER_ARCHIVE").map(project::file)))
-    editorProject.kefsVersion.convention(project.providers.gradleProperty("knapshots.kefsVersion"))
+    editorProject.kefs.version.convention(project.providers.gradleProperty("knapshots.kefsVersion"))
     // JUnit discovers the editor extension when its test dependency is present.
     project.tasks.withType(Test::class.java).configureEach { task ->
       task.systemProperty("junit.jupiter.extensions.autodetection.enabled", "true")

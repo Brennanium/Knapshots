@@ -97,11 +97,13 @@ without an annotation or host argument. Configure the temporary project's plugin
 once in Gradle:
 
 ```kotlin
-knapshotsEditor {
-  pluginId.set("example.compiler")
+knapshots {
+  plugin { id.set("example.compiler") }
   repository.set(layout.projectDirectory.dir("build/local-maven"))
-  kefsCoordinate.set("example:compiler-plugin")
-  kefsRepository.set(layout.projectDirectory.dir("build/ide-maven"))
+  kefs {
+    coordinate.set("example:compiler-plugin")
+    repository.set(layout.projectDirectory.dir("build/ide-maven"))
+  }
 }
 ```
 
@@ -109,8 +111,9 @@ Knapshots uses the test task's runtime classpath as the generated project's depe
 the Kotlin version from the `libs` version catalog's `kotlin` entry and the plugin version from
 the Gradle project version when available; each can be overridden explicitly. Projects with a
 separate consumer classpath or a plugin version unrelated to their project version should configure
-those values explicitly. The compiler plugin ID and KEFS coordinate cannot be reliably inferred
-from the runtime classpath.
+those values explicitly. When the project declares exactly one Gradle plugin using `java-gradle-plugin`, Knapshots can
+also infer its ID, so the `plugin` block can be omitted. If there are multiple declarations,
+select the plugin explicitly. The KEFS coordinate cannot be reliably inferred from the runtime classpath.
 
 The compatibility orchestrator supplies the selected IDE and, when KEFS is enabled, its downloaded
 archive to the editor driver. Configure `adapterArchive` with the Knapshots IntelliJ adapter ZIP;
