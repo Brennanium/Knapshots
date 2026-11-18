@@ -22,6 +22,7 @@ include(
   ":knapshots-editor",
   ":knapshots-ide-runner",
   ":knapshots-compatibility",
+  ":knapshots-gradle-plugin",
 )
 
 // This module compiles against a selected local IDE installation. Keep it opt-in so normal
