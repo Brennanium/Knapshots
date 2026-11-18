@@ -63,6 +63,8 @@ public class KnapshotsCompatibilityPlugin : Plugin<Project> {
 
 @DisableCachingByDefault(because = "Compatibility drivers execute external regression suites")
 public abstract class CompilerCompatibilityTask : DefaultTask() {
+  init { outputs.upToDateWhen { false } }
+
   @get:Input
   public abstract val kotlinVersions: ListProperty<String>
 

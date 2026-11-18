@@ -28,6 +28,8 @@ import org.gradle.work.DisableCachingByDefault
 
 @DisableCachingByDefault(because = "Runs an external IDE regression suite")
 public abstract class EditorCompatibilityTask : DefaultTask() {
+  init { outputs.upToDateWhen { false } }
+
   @get:Input public abstract val ideVersion: Property<String>
   @get:InputFile @get:Optional public abstract val driver: RegularFileProperty
   @get:InputDirectory @get:Optional public abstract val idePath: DirectoryProperty
