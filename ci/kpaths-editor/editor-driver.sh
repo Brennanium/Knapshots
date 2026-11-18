@@ -17,6 +17,14 @@ done
 # assertions below. The old --ide-probe consumer loop is intentionally not invoked.
 python3 "$KPATHS_CHECKOUT/scripts/verify-kefs-compatibility.py" \
   --ide-path "$ide" --ide-kotlin-version "$kotlin" --kefs-version "$kefs" --allow-untested-combination
+: "${KNAPSHOTS_KEFS_ARCHIVE:?The compatibility runner must provide its downloaded KEFS archive}"
+# Build the adapter once for the selected IDE; every scenario launches the packaged plugin.
+"$KNAPSHOTS_CHECKOUT/gradlew" -p "$KNAPSHOTS_CHECKOUT" \
+  -Pkotlin.daemon.jvmargs=-Xmx2g -Pknapshots.enableIntellijAdapter \
+  "-Pknapshots.idePath=$ide" "-Pknapshots.kefsVersion=$kefs" \
+  :knapshots-intellij:writeEditorAdapterPath --no-configuration-cache
+adapter_archive=$(cat "$KNAPSHOTS_CHECKOUT/knapshots-intellij/build/editor-adapter-path.txt")
+[ -f "$adapter_archive" ] || { echo "Adapter archive does not exist: $adapter_archive" >&2; exit 1; }
 for mode in enabled disabled diagnostic; do
   scenario_directory="$KNAPSHOTS_CHECKOUT/ci/kpaths-editor/build/reports/knapshots/scenarios/$mode"
   # Do not collect a report left by a previous invocation.
@@ -27,6 +35,7 @@ for mode in enabled disabled diagnostic; do
     -Pkotlin.daemon.jvmargs=-Xmx2g -Pknapshots.enableIntellijAdapter \
     "-Pknapshots.idePath=$ide" "-Pknapshots.kefsVersion=$kefs" \
     "-Pknapshots.kpathsCheckout=$KPATHS_CHECKOUT" "-Pknapshots.kpathsMode=$mode" "-Pknapshots.reportDirectory=$scenario_directory/inspections" \
+    "-Pknapshots.editor.adapterArchive=$adapter_archive" "-Pknapshots.editor.kefsArchive=$KNAPSHOTS_KEFS_ARCHIVE" \
     -Pknapshots.includeIdeIntegration :knapshots-ide-runner:test \
     --tests '*KPathsEditorIntegrationTest' --no-configuration-cache || test_status=$?
   "$KNAPSHOTS_CHECKOUT/gradlew" -p "$KNAPSHOTS_CHECKOUT/ci/kpaths-editor" \

@@ -120,7 +120,8 @@ adapter and wrapper outside the Knapshots checkout.
 
 The adapter archive is not published yet, so selecting and resolving a compatible archive still
 requires setup. The previous Gradle-based launcher remains available through `knapshots.ideRunnerRoot`.
-KPaths' integration currently passes its project configuration through Gradle test properties.
+The KPaths compatibility driver builds the adapter for its selected IDE and reuses it for all
+scenarios; it passes project configuration through Gradle test properties.
 
 The provider is initialized only when a test calls `assertEditor`. Without the compatibility
 plugin, enable JUnit's `junit.jupiter.extensions.autodetection.enabled` setting yourself.

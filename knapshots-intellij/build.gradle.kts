@@ -113,3 +113,17 @@ tasks.runIde {
   systemProperty("idea.common.data.path", preferences.dir("common").asFile.absolutePath)
   systemProperty("ANDROID_PREFS_ROOT", preferences.dir("android").asFile.absolutePath)
 }
+
+// Publish the resolved distribution path to compatibility drivers without guessing the version.
+tasks.register("writeEditorAdapterPath") {
+  val archive = tasks.named<Zip>("buildPlugin").flatMap { it.archiveFile }
+  val destination = layout.buildDirectory.file("editor-adapter-path.txt")
+  dependsOn("buildPlugin")
+  inputs.file(archive)
+  outputs.file(destination)
+  doLast {
+    val output = destination.get().asFile
+    output.parentFile.mkdirs()
+    output.writeText(archive.get().asFile.absolutePath + "\n")
+  }
+}
