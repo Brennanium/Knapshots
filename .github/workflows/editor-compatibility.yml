@@ -56,8 +56,10 @@ jobs:
           name: knapshots-editor-${{ matrix.os }}
           path: |
             ci/knapshots-editor/build/reports/knapshots/
-            build/ide-integration/
-            knapshots-intellij/build/editor-inspection-sandbox/log/
+            build/ide-integration/**/.knapshots/ide-process.log
+            build/ide-integration/**/.knapshots/editor-request.properties
+            build/ide-integration/**/.knapshots/editor-response.properties
+            build/ide-integration/**/.knapshots/nested-build/knapshots-intellij/editor-inspection-sandbox/log/
             knapshots-ide-runner/build/reports/tests/
             knapshots-ide-runner/build/test-results/
           if-no-files-found: warn
