@@ -17,6 +17,7 @@ import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.TaskAction
+import org.gradle.api.tasks.testing.Test
 import org.gradle.api.tasks.options.Option
 import org.gradle.work.DisableCachingByDefault
 import java.nio.file.Files
@@ -39,6 +40,10 @@ public abstract class CompatibilityExtension {
 
 public class KnapshotsCompatibilityPlugin : Plugin<Project> {
   override fun apply(project: Project) {
+    // JUnit discovers the editor extension when its test dependency is present.
+    project.tasks.withType(Test::class.java).configureEach { task ->
+      task.systemProperty("junit.jupiter.extensions.autodetection.enabled", "true")
+    }
     val extension = project.extensions.create("knapshotsCompatibility", CompatibilityExtension::class.java)
     extension.ideCache.convention(project.layout.buildDirectory.dir("knapshots/ide-distributions"))
     extension.useKefs.convention(false)

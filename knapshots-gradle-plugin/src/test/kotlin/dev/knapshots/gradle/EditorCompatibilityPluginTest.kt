@@ -9,6 +9,21 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 
 class EditorCompatibilityPluginTest {
+  @Test fun `enables editor extension discovery for JUnit test tasks`(@TempDir dir: Path) {
+    Files.writeString(dir.resolve("settings.gradle.kts"), "rootProject.name = \"consumer\"")
+    Files.writeString(dir.resolve("build.gradle.kts"), """
+      plugins { java; id("dev.knapshots.compatibility") }
+      tasks.register("inspectTestConfiguration") {
+        doLast {
+          val value = tasks.named<Test>("test").get().systemProperties["junit.jupiter.extensions.autodetection.enabled"]
+          check(value == "true")
+        }
+      }
+    """.trimIndent())
+    GradleRunner.create().withProjectDir(dir.toFile()).withPluginClasspath()
+      .withArguments("inspectTestConfiguration").build()
+  }
+
   @Test fun `selects release validates local IDE and invokes driver`(@TempDir dir: Path) {
     Files.writeString(dir.resolve("settings.gradle.kts"), "rootProject.name = \"consumer\"")
     val ide = dir.resolve("studio")

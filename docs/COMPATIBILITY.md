@@ -88,3 +88,15 @@ independently of temporary-project retention. On failure, the host also collects
 log and the relative paths supplied through `failureReportFiles`. A driver can place these files
 in the scenario's `inspections` directory and upload `build/reports/knapshots` as a CI artifact.
 The failure paths are relative to the temporary inspection directory.
+
+## Editor assertions in JUnit
+
+Add `knapshots-editor-junit` to the test dependencies and configure an `EditorHostProvider`
+service for the project. The compatibility plugin enables JUnit extension discovery, so tests can
+call `assertEditor(source) { ... }` without passing a host or adding an annotation to each test.
+Without the Gradle plugin, enable JUnit's `junit.jupiter.extensions.autodetection.enabled` setting.
+The host is created only when an editor assertion runs.
+
+The current KPaths consumer test demonstrates this integration, including its provider. The
+provider still assembles the IDE launcher and generated project configuration explicitly; a
+streamlined Gradle-backed provider for ordinary consumers remains to be implemented.

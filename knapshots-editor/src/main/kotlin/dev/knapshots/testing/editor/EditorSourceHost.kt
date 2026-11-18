@@ -89,6 +89,11 @@ public fun assertEditor(
   }
 }
 
+/** Project-level factory discovered by a test-framework integration. */
+public fun interface EditorHostProvider {
+  public fun createHost(): EditorSourceHost
+}
+
 private val editorHostContext = ThreadLocal<EditorSourceHost>()
 
 /** Runs editor assertions with a shared host on the current thread; nested scopes are restored. */

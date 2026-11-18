@@ -20,6 +20,7 @@ include(
   ":knapshots-snapshots",
   ":knapshots-compiler",
   ":knapshots-editor",
+  ":knapshots-editor-junit",
   ":knapshots-ide-runner",
   ":knapshots-compatibility",
   ":knapshots-gradle-plugin",

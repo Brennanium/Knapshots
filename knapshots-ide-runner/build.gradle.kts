@@ -4,12 +4,14 @@ plugins {
 
 dependencies {
   api(project(":knapshots-editor"))
+  testImplementation(project(":knapshots-editor-junit"))
   testImplementation(kotlin("test"))
   testImplementation(libs.junit.jupiter)
   testRuntimeOnly(libs.junit.platform.launcher)
 }
 
 tasks.test {
+  systemProperty("junit.jupiter.extensions.autodetection.enabled", "true")
   useJUnitPlatform {
     if (!providers.gradleProperty("knapshots.includeIdeIntegration").isPresent) {
       excludeTags("ide-integration")
