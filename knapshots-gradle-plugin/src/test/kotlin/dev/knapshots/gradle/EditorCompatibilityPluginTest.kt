@@ -33,5 +33,16 @@ class EditorCompatibilityPluginTest {
       .withArguments("editorCompatibility", "--ide-version", "2026.2.2.8").build()
     assertContains(result.output, "262.123")
     assertEquals(ide.toRealPath(), Path.of(Files.readString(dir.resolve("ide.txt"))).toRealPath())
+    assertContains(Files.readString(dir.resolve("build/reports/knapshots/editor-compatibility.json")), "\"result\": \"passed\"")
+  }
+
+  @Test fun `writes failure report when driver is missing`(@TempDir dir: Path) {
+    Files.writeString(dir.resolve("settings.gradle.kts"), "rootProject.name = \"consumer\"")
+    Files.writeString(dir.resolve("build.gradle.kts"), "plugins { id(\"dev.knapshots.compatibility\") }")
+    GradleRunner.create().withProjectDir(dir.toFile()).withPluginClasspath()
+      .withArguments("editorCompatibility", "--ide-version", "2026.2.2.8").buildAndFail()
+    val report = Files.readString(dir.resolve("build/reports/knapshots/editor-compatibility.json"))
+    assertContains(report, "\"result\": \"failed\"")
+    assertContains(report, "editorDriver")
   }
 }

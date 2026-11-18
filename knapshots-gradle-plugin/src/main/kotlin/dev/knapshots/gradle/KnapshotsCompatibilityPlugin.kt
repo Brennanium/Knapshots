@@ -29,12 +29,18 @@ public abstract class CompatibilityExtension {
   public abstract val idePath: DirectoryProperty
   public abstract val releaseFeed: RegularFileProperty
   public abstract val ideCache: DirectoryProperty
+  /** Opt in to KEFS Marketplace discovery and Android Studio compiler mapping. */
+  public abstract val useKefs: Property<Boolean>
+  public abstract val kefsVersion: Property<String>
+  public abstract val useXvfb: Property<Boolean>
 }
 
 public class KnapshotsCompatibilityPlugin : Plugin<Project> {
   override fun apply(project: Project) {
     val extension = project.extensions.create("knapshotsCompatibility", CompatibilityExtension::class.java)
     extension.ideCache.convention(project.layout.buildDirectory.dir("knapshots/ide-distributions"))
+    extension.useKefs.convention(false)
+    extension.useXvfb.convention(false)
     project.tasks.register("compilerCompatibility", CompilerCompatibilityTask::class.java) { task ->
       task.group = "verification"
       task.description = "Run compiler compatibility checks for selected Kotlin versions."
@@ -47,6 +53,10 @@ public class KnapshotsCompatibilityPlugin : Plugin<Project> {
       task.idePath.set(extension.idePath)
       task.releaseFeed.set(extension.releaseFeed)
       task.ideCache.set(extension.ideCache)
+      task.useKefs.set(extension.useKefs)
+      task.kefsVersion.set(extension.kefsVersion)
+      task.useXvfb.set(extension.useXvfb)
+      task.reportFile.set(project.layout.buildDirectory.file("reports/knapshots/editor-compatibility.json"))
     }
   }
 }

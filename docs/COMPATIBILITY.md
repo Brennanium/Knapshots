@@ -35,17 +35,27 @@ Apply `dev.knapshots.compatibility` and configure the executable drivers:
 knapshotsCompatibility {
   compilerDriver.set(layout.projectDirectory.file("scripts/compiler-driver"))
   editorDriver.set(layout.projectDirectory.file("scripts/editor-driver"))
+  useKefs.set(true) // optional; for a KEFS-based compiler plugin
+  useXvfb.set(true) // optional; for Linux runners with xvfb-run installed
 }
 ```
 
 The compiler driver receives `--kotlin-version <resolved version>`, and the editor driver receives
-`--ide-path <validated installation>`. A nonzero exit code fails the task. The IDE task resolves
+`--ide-path <validated installation>`. With KEFS enabled, the editor driver also receives
+`--kotlin-ide-version` information as `--ide-kotlin-version` and the selected `--kefs-version`.
+A nonzero exit code fails the task. The IDE task resolves
 the official feed, caches the SHA-256-verified archive, and provisions a temporary installation.
 `idePath` and `releaseFeed` are optional overrides; the supplied IDE must match the selected build.
 
+The task writes `build/reports/knapshots/editor-compatibility.json` with the resolved release,
+result, and any selected KEFS/compiler versions. Its opt-in KEFS discovery selects a compatible
+Marketplace release and reads its mapping for Android Studio's special compiler versions; the
+driver remains responsible for installing/configuring KEFS and its compiler plugin.
+
 Knapshots currently has a local Android Studio imported-project smoke test. It does not yet have
-a compiler backend, automatic KEFS provisioning, bundled-compiler discovery, virtual-display
-orchestration, machine-readable compatibility reports, or Linux CI verification. Selecting an IDE does not itself make an adapter or compiler plugin compatible
+a compiler backend, automatic KEFS installation, or verified Linux CI coverage. The new
+orchestration is covered by synthetic tests and has not yet been validated against the real KPaths
+driver and Marketplace. Selecting an IDE does not itself make an adapter or compiler plugin compatible
 with its bundled compiler; a run must fail clearly if it lacks compatible artifacts or a driver.
 
 Keep version selection, distribution resolution, platform launch, and project-specific assertions
