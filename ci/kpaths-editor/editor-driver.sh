@@ -24,4 +24,9 @@ for mode in enabled disabled diagnostic; do
     "-Pknapshots.kpathsCheckout=$KPATHS_CHECKOUT" "-Pknapshots.kpathsMode=$mode" \
     -Pknapshots.includeIdeIntegration :knapshots-ide-runner:test \
     --tests '*KPathsEditorIntegrationTest' --no-configuration-cache
+  report="$KNAPSHOTS_CHECKOUT/knapshots-ide-runner/build/test-results/test/TEST-dev.knapshots.testing.ide.KPathsEditorIntegrationTest.xml"
+  python3 -c 'import sys, xml.etree.ElementTree as ET; r=ET.parse(sys.argv[1]).getroot(); ok=int(r.get("tests", 0)) > 0 and all(int(r.get(k, 0)) == 0 for k in ("skipped", "failures", "errors")); sys.exit(0 if ok else "KPaths editor test did not pass without skips")' "$report"
+  destination="$KNAPSHOTS_CHECKOUT/build/kpaths-editor-results/$mode"
+  mkdir -p "$destination"
+  cp "$report" "$destination/"
 done

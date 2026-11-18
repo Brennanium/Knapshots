@@ -74,6 +74,7 @@ jobs:
             knapshots/build/ide-integration/**/.knapshots/editor-response.properties
             knapshots/build/ide-integration/**/nested-build/knapshots-intellij/editor-inspection-sandbox/log/
             knapshots/knapshots-ide-runner/build/test-results/
+            knapshots/build/kpaths-editor-results/
             kpaths/kpaths-kefs-ide-fixture/build/consumer-probe*.log
             kpaths/kpaths-kefs-ide-fixture/build/consumer-probe*.txt
             kpaths/kpaths-kefs-ide-fixture/build/ide-probe/**/log/
