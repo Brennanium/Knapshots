@@ -11,8 +11,13 @@ import dev.knapshots.testing.snapshot.textSnapshotting
 import java.nio.file.Files
 
 public data class KspSource(val fileName: String, val text: String)
-public data class KspRequest(val sources: List<KspSource>, val compilerVersion: String)
-public data class KspResult(val succeeded: Boolean, val generatedFiles: Map<String, String>, val output: String = "")
+public data class KspDependency(val name: String, val sources: List<KspSource>)
+public data class KspProcessorProject(val name: String, val sources: List<KspSource>, val providers: List<String>)
+public enum class KspDiagnosticSeverity { ERROR, WARNING, INFO }
+public data class KspDiagnostic(val severity: KspDiagnosticSeverity, val message: String, val file: String? = null, val line: Int? = null, val column: Int? = null)
+public data class KspDiagnosticExpectation(val severity: KspDiagnosticSeverity, val messageContains: String, val file: String? = null, val line: Int? = null, val column: Int? = null)
+public data class KspRequest(val sources: List<KspSource>, val compilerVersion: String, val dependencies: List<KspDependency> = emptyList(), val mainClass: String? = null, val processorProjects: List<KspProcessorProject> = emptyList())
+public data class KspResult(val succeeded: Boolean, val generatedFiles: Map<String, String>, val output: String = "", val diagnostics: List<KspDiagnostic> = emptyList(), val executionSucceeded: Boolean? = null)
 public fun interface KspHost { public fun process(request: KspRequest): KspResult }
 
 /** Asserts processor output and compilation outcome. File names are part of the snapshot. */
@@ -25,6 +30,11 @@ public fun assertKsp(
   fileName: String = "Main.kt",
   succeeds: Boolean = true,
   diagnostics: List<String> = emptyList(),
+  expectedDiagnostics: List<KspDiagnosticExpectation>? = null,
+  dependencies: List<KspDependency> = emptyList(),
+  processorProjects: List<KspProcessorProject> = emptyList(),
+  mainClass: String? = null,
+  executionSucceeds: Boolean = true,
   record: SnapshotRecording = configuredRecording(),
   recordVersion: Boolean = System.getProperty("knapshots.ksp.recordVersion", "false").toBooleanStrict(),
   location: InlineSnapshotLocation? = null,
@@ -34,10 +44,35 @@ public fun assertKsp(
   require(sources.map { it.fileName }.distinct().size == sources.size) { "Source file names must be unique." }
   val target = if (generated != null && record != SnapshotRecording.NONE) location ?: discoverInlineSnapshotLocation() else null
   val original = target?.let { Files.readString(it.file) }
-  val result = host.process(KspRequest(sources.map { it.copy(text = it.text.trimIndent()) }, compilerVersion))
+  val result = host.process(KspRequest(sources.map { it.copy(text = it.text.trimIndent()) }, compilerVersion,
+    dependencies.map { dependency -> dependency.copy(sources = dependency.sources.map { it.copy(text = it.text.trimIndent()) }) }, mainClass, processorProjects.map { processor -> processor.copy(sources = processor.sources.map { it.copy(text = it.text.trimIndent()) }) }))
   if (result.succeeded != succeeds) throw AssertionError("Expected KSP compilation to ${if (succeeds) "succeed" else "fail"}, but it ${if (result.succeeded) "succeeded" else "failed"}.\n${result.output}")
   diagnostics.forEach { expected ->
     if (!result.output.contains(expected)) throw AssertionError("Missing diagnostic containing '$expected'.\n${result.output}")
+  }
+  if (mainClass != null && result.succeeded && result.executionSucceeded != executionSucceeds) {
+    throw AssertionError("Expected execution to ${if (executionSucceeds) "succeed" else "fail"}, but it ${when (result.executionSucceeded) { true -> "succeeded"; false -> "failed"; null -> "did not run" }}.\n${result.output}")
+  }
+  expectedDiagnostics?.let { expected ->
+    val owner = IntArray(result.diagnostics.size) { -1 }
+    fun assign(expectedIndex: Int, visited: BooleanArray): Boolean {
+      val item = expected[expectedIndex]
+      require(item.messageContains.isNotBlank()) { "Expected diagnostic text must not be blank." }
+      for (index in result.diagnostics.indices) {
+        val actual = result.diagnostics[index]
+        if (visited[index] || actual.severity != item.severity || !actual.message.contains(item.messageContains) ||
+          (item.file != null && actual.file != item.file) || (item.line != null && actual.line != item.line) ||
+          (item.column != null && actual.column != item.column)) continue
+        visited[index] = true
+        if (owner[index] == -1 || assign(owner[index], visited)) { owner[index] = expectedIndex; return true }
+      }
+      return false
+    }
+    expected.forEachIndexed { index, item ->
+      if (!assign(index, BooleanArray(result.diagnostics.size))) throw AssertionError("Missing diagnostic $item. Actual: ${result.diagnostics}\n${result.output}")
+    }
+    val unexpected = result.diagnostics.filterIndexed { index, diagnostic -> owner[index] == -1 && diagnostic.severity == KspDiagnosticSeverity.ERROR }
+    if (unexpected.isNotEmpty()) throw AssertionError("Unexpected error diagnostics: $unexpected\n${result.output}")
   }
   if (generated == null) return
   val actual = result.generatedFiles.toSortedMap().entries.joinToString("\n\n") { (name, text) ->

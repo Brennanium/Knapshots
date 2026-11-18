@@ -32,6 +32,29 @@ assertKsp(
 )
 ```
 
-`additionalSources` accepts named `KspSource` files. Diagnostics currently match substrings of Gradle output; they are not structured severity or source-location assertions. Compilation success is checked by default, and an expected failure must actually reach the KSP task. The built-in host uses a temporary Gradle JVM project, resolves the supplied Kotlin and KSP versions, and cleans it up afterwards. It does not yet cover custom Gradle project configuration, multiplatform compilations, processor resources, or snapshotting non-source outputs.
+`additionalSources` accepts named `KspSource` files. Use `dependencies` to compile a separate JVM module before processing the main source; KSP sees that module's binary metadata. For a test-owned processor, `processorProjects` accepts sources and provider class names, builds the processor, and registers its service descriptor. Both kinds of projects use the configured classpaths.
 
-The KPaths checkout includes a real-processor integration test when `-Pknapshots.checkout=/path/to/Knapshots` is set. It verifies generated source and processor diagnostics through an actual downstream Gradle project.
+Set `mainClass` to execute the compiled fixture after processing. The assertion checks compilation and execution independently; set `executionSucceeds = false` when testing an expected runtime failure.
+
+For structured diagnostic checks, supply `expectedDiagnostics` with `KspDiagnosticExpectation` values:
+
+```kotlin
+assertKsp(
+  source = "@GenerateCatalog class Example",
+  succeeds = false,
+  expectedDiagnostics = listOf(
+    KspDiagnosticExpectation(
+      KspDiagnosticSeverity.ERROR,
+      "Expected an eligible declaration",
+      file = "src/main/kotlin/Main.kt",
+      line = 1,
+    ),
+  ),
+)
+```
+
+Each expectation can specify severity, message text, relative source file, line, and column. Unexpected parsed errors fail the assertion. The Gradle host parses Kotlin and KSP command-line diagnostics; unrecognized output remains available as raw text and the `diagnostics` string list remains available for substring checks.
+
+The built-in host uses temporary Gradle JVM projects, resolves the supplied Kotlin and KSP versions, and cleans them up afterwards. It does not yet cover arbitrary Gradle project configuration, multiplatform compilations, or snapshotting non-source outputs.
+
+The KPaths checkout includes real-processor integration tests when `-Pknapshots.checkout=/path/to/Knapshots` is set. They exercise generated source, processor diagnostics, binary dependencies, runtime execution, and a separately built processor project.
