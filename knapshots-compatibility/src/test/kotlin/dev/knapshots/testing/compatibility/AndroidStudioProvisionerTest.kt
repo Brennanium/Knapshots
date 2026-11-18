@@ -30,6 +30,22 @@ class AndroidStudioProvisionerTest {
     }
   }
 
+  @Test fun `detaches the temporary read-only macOS image with force`(@TempDir directory: Path) {
+    val image = directory.resolve("2026.2.2-mac_arm.dmg")
+    Files.writeString(image, "synthetic image")
+    val commands = mutableListOf<List<String>>()
+    val provisioner = AndroidStudioProvisioner(directory) { args ->
+      commands += args
+      if (args[1] == "attach") {
+        val mount = Path.of(args[args.indexOf("-mountpoint") + 1])
+        Files.createDirectories(mount.resolve("Android Studio.app"))
+      }
+      0
+    }
+    assertEquals("Android Studio.app", provisioner.useIde(release(image), IdePlatform.MAC_ARM64) { it.fileName.toString() })
+    assertEquals(listOf("hdiutil", "detach", "-force"), commands.last().take(3))
+  }
+
   private fun release(path: Path): AndroidStudioRelease {
     val digest = MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(path)).joinToString("") { "%02x".format(it) }
     return AndroidStudioRelease("Studio", "2026.2.2", "build", "https://example.test/unused", digest)

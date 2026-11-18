@@ -9,7 +9,11 @@ import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
 
 /** Provisions a checksum-verified distribution for the duration of [useIde]. */
-public class AndroidStudioProvisioner(private val cache: Path) {
+public class AndroidStudioProvisioner internal constructor(
+  private val cache: Path,
+  private val commandRunner: (List<String>) -> Int,
+) {
+  public constructor(cache: Path) : this(cache, ::runCommand)
   public fun <T> useIde(release: AndroidStudioRelease, platform: IdePlatform, action: (Path) -> T): T {
     require(release.version.matches(Regex("[0-9]+(?:\\.[0-9]+)+"))) { "Invalid IDE version." }
     Files.createDirectories(cache)
@@ -31,7 +35,9 @@ public class AndroidStudioProvisioner(private val cache: Path) {
         return action(ide)
       } finally {
         if (mounted) {
-          command("hdiutil", "detach", temporary.toString())
+          // The IDE's bundled JBR may still be held by a Gradle daemon after tests finish.
+          // The image is our temporary read-only mount; mirror KPaths' targeted cleanup.
+          command("hdiutil", "detach", "-force", temporary.toString())
           mounted = false
         }
       }
@@ -92,7 +98,15 @@ public class AndroidStudioProvisioner(private val cache: Path) {
   }
 
   private fun command(vararg args: String) {
-    val process = ProcessBuilder(*args).inheritIO().start()
-    check(process.waitFor() == 0) { "IDE provisioning command failed: ${args.first()}" }
+    val exit = commandRunner(args.toList())
+    check(exit == 0) { "IDE provisioning command failed (exit $exit): ${args.joinToString(" ")}" }
+  }
+
+  private companion object {
+    fun runCommand(args: List<String>): Int {
+      val process = ProcessBuilder(args).redirectErrorStream(true).start()
+      process.inputStream.bufferedReader().useLines { lines -> lines.forEach(::println) }
+      return process.waitFor()
+    }
   }
 }
