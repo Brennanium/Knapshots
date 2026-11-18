@@ -41,6 +41,26 @@ class EditorSourceHostTest {
     assertFailsWith<AssertionError> { assertEditor("val value: Int = \"wrong\"", host) {} }
   }
 
+  @Test fun `source assertions complete managed sessions with their result`() {
+    val outcomes = mutableListOf<Boolean>()
+    val host = EditorSourceHost {
+      object : EditorObservationSession {
+        override fun diagnostics() = emptyList<EditorDiagnostic>()
+        override fun reference(expression: String) = ReferenceObservation.Unresolved
+        override fun complete(successful: Boolean) {
+          outcomes += successful
+        }
+      }
+    }
+
+    assertEditor("class Example", host) { reference("missing").isUnresolved() }
+    assertFailsWith<AssertionError> {
+      assertEditor("class Example", host) { reference("missing").resolves() }
+    }
+
+    assertEquals(listOf(true, false), outcomes)
+  }
+
   @Test fun `additional sources and disabled diagnostics are sent to the host`() {
     var opened: EditorRequest? = null
     val host = EditorSourceHost { request ->

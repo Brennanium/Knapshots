@@ -2,6 +2,7 @@ package dev.knapshots.testing.ide
 
 import dev.knapshots.testing.editor.EditorDiagnostic
 import dev.knapshots.testing.editor.EditorObservations
+import dev.knapshots.testing.editor.EditorObservationSession
 import dev.knapshots.testing.editor.EditorRequest
 import dev.knapshots.testing.editor.EditorSourceHost
 import dev.knapshots.testing.editor.ReferenceObservation
@@ -55,7 +56,7 @@ public class RunnerEditorSourceHost(
     val parent = temporaryParent ?: Path.of(System.getProperty("java.io.tmpdir"))
     Files.createDirectories(parent)
     val temporaryDirectory = Files.createTempDirectory(parent, "knapshots-editor-")
-    var successful = false
+    var returnedSession = false
     try {
       val project = EditorProjectMaterializer().materialize(temporaryDirectory.resolve("project"), template, request)
       val process = launcher.launch(project)
@@ -76,17 +77,20 @@ public class RunnerEditorSourceHost(
       when (response) {
         is EditorInspectionResponse.Failed -> throw EditorInspectionException(response.reason, project.directory)
         is EditorInspectionResponse.Completed -> {
-          successful = true
-          return RecordedEditorObservations(response)
+          returnedSession = true
+          return RecordedEditorObservations(response) { assertionsSucceeded ->
+            if (shouldDelete(assertionsSucceeded)) deleteRecursively(temporaryDirectory)
+          }
         }
       }
     } finally {
-      if (retention == EditorProjectRetention.NEVER ||
-        (retention == EditorProjectRetention.ON_FAILURE && successful)) {
-        deleteRecursively(temporaryDirectory)
-      }
+      if (!returnedSession && shouldDelete(successful = false)) deleteRecursively(temporaryDirectory)
     }
   }
+
+  private fun shouldDelete(successful: Boolean): Boolean =
+    retention == EditorProjectRetention.NEVER ||
+      (retention == EditorProjectRetention.ON_FAILURE && successful)
 
   private fun deleteRecursively(directory: Path) {
     if (!Files.exists(directory)) return
@@ -98,7 +102,16 @@ public class RunnerEditorSourceHost(
 
 private class RecordedEditorObservations(
   private val response: EditorInspectionResponse.Completed,
-) : EditorObservations {
+  private val onComplete: (successful: Boolean) -> Unit,
+) : EditorObservationSession {
+  private var completed: Boolean = false
+
+  override fun complete(successful: Boolean) {
+    check(!completed) { "An editor observation session can only be completed once." }
+    completed = true
+    onComplete(successful)
+  }
+
   override fun diagnostics(): List<EditorDiagnostic> = response.diagnostics
     ?: error("The IDE did not provide diagnostics for this editor inspection.")
 

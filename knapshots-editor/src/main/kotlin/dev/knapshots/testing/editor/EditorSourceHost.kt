@@ -33,6 +33,16 @@ public fun interface EditorSourceHost {
 }
 
 /**
+ * An [EditorObservations] value whose host needs the final assertion result to release resources.
+ *
+ * Source-driven [assertEditor] calls complete these sessions automatically. Callers that invoke
+ * [EditorSourceHost.open] directly must call [complete] themselves.
+ */
+public interface EditorObservationSession : EditorObservations {
+  public fun complete(successful: Boolean)
+}
+
+/**
  * Opens inline source in a test host and checks the resulting editor observations.
  *
  * The host owns IDE/project lifecycle and dependency setup. The assertion gathers requested
@@ -60,5 +70,11 @@ public fun assertEditor(
       captureDiagnostics = checkDiagnostics,
     ),
   )
-  expectations.verify(observations)
+  var successful = false
+  try {
+    expectations.verify(observations)
+    successful = true
+  } finally {
+    (observations as? EditorObservationSession)?.complete(successful)
+  }
 }
