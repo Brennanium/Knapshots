@@ -7,16 +7,16 @@ The intended Gradle entry points select toolchains per invocation:
 ./gradlew compilerCompatibility --kotlin-version 2.4.21
 ```
 
-These tasks are experimental and currently require project-provided drivers. Compiler selectors accept dev
-families such as `2.5.0-dev*`, reporting the concrete version selected. IDE selectors should
+These tasks are experimental and currently require project-provided drivers. Compiler selectors
+accept dev families such as `2.5.0-dev*`, reporting the concrete version selected. IDE selectors
 accept a full version or build and `latest-stable`.
 
-Compiler and editor compatibility are independent dimensions. Compiler compatibility runs a
-project's compiler and consumer regression suites for the selected Kotlin version, recording
-which platforms passed, failed, or were not run. Editor compatibility resolves an Android
-Studio release, verifies its official download checksum, and runs editor assertions in an
-isolated IDE. Its report records the actual IDE build and bundled IDE compiler. A local IDE
-override should be verified against the requested build.
+Compiler and editor compatibility are independent dimensions. Compiler compatibility invokes
+the configured project driver for each selected Kotlin version and reports its result. The driver
+owns the choice and reporting of JVM, Native, and consumer tests. Editor compatibility resolves an
+Android Studio release, verifies its official download checksum, and invokes the configured editor
+driver. Its report records the actual IDE build; when KEFS discovery is enabled it also records
+the IDE compiler version. A local IDE override must match the selected build.
 
 The existing KPaths implementation is the migration reference:
 
@@ -42,7 +42,7 @@ knapshotsCompatibility {
 
 The compiler driver receives `--kotlin-version <resolved version>`, and the editor driver receives
 `--ide-path <validated installation>`. With KEFS enabled, the editor driver also receives
-`--kotlin-ide-version` information as `--ide-kotlin-version` and the selected `--kefs-version`.
+`--ide-kotlin-version` and the selected `--kefs-version`.
 A nonzero exit code fails the task. The IDE task resolves
 the official feed, caches the SHA-256-verified archive, and provisions a temporary installation.
 `idePath` and `releaseFeed` are optional overrides; the supplied IDE must match the selected build.
@@ -52,14 +52,12 @@ result, and any selected KEFS/compiler versions. Its opt-in KEFS discovery selec
 Marketplace release and reads its mapping for Android Studio's special compiler versions; the
 driver remains responsible for installing/configuring KEFS and its compiler plugin.
 
-Knapshots has a local Android Studio imported-project smoke test. A macOS integration run also
-invoked KPaths' existing KEFS driver through `editorCompatibility` using Android Studio
-2026.2.2.8, KEFS 0.5.0-262, and IDE Kotlin 2.4.20-ij262-52. The enabled, disabled, and expected
-diagnostic imported-project scenarios passed. That run used an installed IDE override; it did not
-verify distribution download, Linux/Xvfb, or a KPaths migration away from its existing scripts.
-Knapshots does not yet have a compiler backend, automatic KEFS installation, or verified Linux
-CI coverage. Selecting an IDE does not itself make an adapter or compiler plugin compatible
-with its bundled compiler; a run must fail clearly if it lacks compatible artifacts or a driver.
+Knapshots' imported-project smoke test has passed on Ubuntu/Xvfb and macOS CI using Android Studio
+2026.2.2.8. A separate local integration uses Knapshots' editor host to test a KPaths consumer
+with KEFS enabled, disabled, and with an intentional Kotlin error. KPaths still prepares its own
+artifacts for this test. Knapshots does not yet have a compiler backend or a fully independent
+KPaths integration, and the KPaths-backed CI matrix is being verified. Selecting an IDE does not
+itself make an adapter or compiler plugin compatible with its bundled compiler.
 
 Keep version selection, distribution resolution, platform launch, and project-specific assertions
 as distinct components. The same tasks should work locally and on CI, with reports identifying
