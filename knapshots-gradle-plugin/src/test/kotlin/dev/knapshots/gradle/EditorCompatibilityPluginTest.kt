@@ -1,0 +1,37 @@
+package dev.knapshots.gradle
+
+import java.nio.file.Files
+import java.nio.file.Path
+import kotlin.test.assertContains
+import kotlin.test.assertEquals
+import org.gradle.testkit.runner.GradleRunner
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
+
+class EditorCompatibilityPluginTest {
+  @Test fun `selects release validates local IDE and invokes driver`(@TempDir dir: Path) {
+    Files.writeString(dir.resolve("settings.gradle.kts"), "rootProject.name = \"consumer\"")
+    val ide = dir.resolve("studio")
+    Files.createDirectories(ide)
+    Files.writeString(ide.resolve("product-info.json"), """{"name":"Android Studio","buildNumber":"AI-262.123"}""")
+    val feed = """<releases><item><name>Studio</name><version>2026.2.2.8</version><build>AI-262.123</build><channel>Stable</channel>
+      <download><link>https://example.test/a-linux.tar.gz</link><checksum>${"a".repeat(64)}</checksum></download>
+      <download><link>https://example.test/a-mac_arm.dmg</link><checksum>${"a".repeat(64)}</checksum></download></item></releases>"""
+    Files.writeString(dir.resolve("releases.xml"), feed)
+    val driver = dir.resolve("editor-driver.sh")
+    Files.writeString(driver, "#!/bin/sh\nprintf '%s' \"\$2\" > ide.txt\n")
+    check(driver.toFile().setExecutable(true))
+    Files.writeString(dir.resolve("build.gradle.kts"), """
+      plugins { id("dev.knapshots.compatibility") }
+      knapshotsCompatibility {
+        editorDriver.set(layout.projectDirectory.file("editor-driver.sh"))
+        releaseFeed.set(layout.projectDirectory.file("releases.xml"))
+        idePath.set(layout.projectDirectory.dir("studio"))
+      }
+    """.trimIndent())
+    val result = GradleRunner.create().withProjectDir(dir.toFile()).withPluginClasspath()
+      .withArguments("editorCompatibility", "--ide-version", "2026.2.2.8").build()
+    assertContains(result.output, "262.123")
+    assertEquals(ide.toRealPath(), Path.of(Files.readString(dir.resolve("ide.txt"))).toRealPath())
+  }
+}

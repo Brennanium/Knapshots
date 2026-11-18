@@ -7,7 +7,7 @@ The intended Gradle entry points select toolchains per invocation:
 ./gradlew compilerCompatibility --kotlin-version 2.4.21
 ```
 
-These are target APIs, not implemented tasks yet. Compiler selectors should also accept dev
+These tasks are experimental and currently require project-provided drivers. Compiler selectors accept dev
 families such as `2.5.0-dev*`, reporting the concrete version selected. IDE selectors should
 accept a full version or build and `latest-stable`.
 
@@ -29,9 +29,23 @@ The existing KPaths implementation is the migration reference:
 - `.github/workflows/ide-compatibility.yml` runs version entries on Linux and macOS, provisions
   Xvfb on Linux, and collects machine-readable results and logs.
 
+Apply `dev.knapshots.compatibility` and configure the executable drivers:
+
+```kotlin
+knapshotsCompatibility {
+  compilerDriver.set(layout.projectDirectory.file("scripts/compiler-driver"))
+  editorDriver.set(layout.projectDirectory.file("scripts/editor-driver"))
+}
+```
+
+The compiler driver receives `--kotlin-version <resolved version>`, and the editor driver receives
+`--ide-path <validated installation>`. A nonzero exit code fails the task. The IDE task resolves
+the official feed, caches the SHA-256-verified archive, and provisions a temporary installation.
+`idePath` and `releaseFeed` are optional overrides; the supplied IDE must match the selected build.
+
 Knapshots currently has a local Android Studio imported-project smoke test. It does not yet have
-a compiler backend, compatibility tasks, IDE distribution resolver, KEFS provisioning, or Linux
-CI verification. Selecting an IDE does not itself make an adapter or compiler plugin compatible
+a compiler backend, automatic KEFS provisioning, bundled-compiler discovery, virtual-display
+orchestration, machine-readable compatibility reports, or Linux CI verification. Selecting an IDE does not itself make an adapter or compiler plugin compatible
 with its bundled compiler; a run must fail clearly if it lacks compatible artifacts or a driver.
 
 Keep version selection, distribution resolution, platform launch, and project-specific assertions

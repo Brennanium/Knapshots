@@ -9,6 +9,8 @@ import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.provider.Property
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
@@ -22,15 +24,29 @@ import java.nio.file.Files
 public abstract class CompatibilityExtension {
   /** Executable accepting `--kotlin-version <version>` and returning a process exit code. */
   public abstract val compilerDriver: RegularFileProperty
+  /** Executable accepting `--ide-path <path>`. */
+  public abstract val editorDriver: RegularFileProperty
+  public abstract val idePath: DirectoryProperty
+  public abstract val releaseFeed: RegularFileProperty
+  public abstract val ideCache: DirectoryProperty
 }
 
 public class KnapshotsCompatibilityPlugin : Plugin<Project> {
   override fun apply(project: Project) {
     val extension = project.extensions.create("knapshotsCompatibility", CompatibilityExtension::class.java)
+    extension.ideCache.convention(project.layout.buildDirectory.dir("knapshots/ide-distributions"))
     project.tasks.register("compilerCompatibility", CompilerCompatibilityTask::class.java) { task ->
       task.group = "verification"
       task.description = "Run compiler compatibility checks for selected Kotlin versions."
       task.driver.set(extension.compilerDriver)
+    }
+    project.tasks.register("editorCompatibility", EditorCompatibilityTask::class.java) { task ->
+      task.group = "verification"
+      task.description = "Run editor compatibility checks for an Android Studio release."
+      task.driver.set(extension.editorDriver)
+      task.idePath.set(extension.idePath)
+      task.releaseFeed.set(extension.releaseFeed)
+      task.ideCache.set(extension.ideCache)
     }
   }
 }
