@@ -76,7 +76,12 @@ public class EmbeddedCompilerHost(
       val captures = captureFiles.mapNotNull { (kind, path) ->
         if (Files.isRegularFile(path)) kind to Files.readString(path) else null
       }.toMap()
-      return CompilerResult(exit == ExitCode.OK, diagnostics, captures)
+      val classesDirectory = directory.resolve("classes")
+      val classes = if (Files.isDirectory(classesDirectory)) Files.walk(classesDirectory).use { paths ->
+        paths.filter { Files.isRegularFile(it) && it.fileName.toString().endsWith(".class") }.toList()
+          .associate { classesDirectory.relativize(it).toString().replace('\\', '/') to Files.readAllBytes(it) }
+      } else emptyMap()
+      return CompilerResult(exit == ExitCode.OK, diagnostics, captures, classes)
     } finally {
       Files.walk(directory).use { paths -> paths.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists) }
     }

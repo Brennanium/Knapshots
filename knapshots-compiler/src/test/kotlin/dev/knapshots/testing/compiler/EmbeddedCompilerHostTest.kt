@@ -27,4 +27,17 @@ class EmbeddedCompilerHostTest {
       host.compile(CompilerRequest(listOf(CompilerSource("Test.kt", "class Example")), version, setOf(CompilerSnapshotKind.IR)))
     }
   }
+  @Test fun `compiled JVM output remains loadable and inspectable after cleanup`() {
+    val version = org.jetbrains.kotlin.config.KotlinCompilerVersion.VERSION
+    val result = EmbeddedCompilerHost().compile(CompilerRequest(
+      listOf(CompilerSource("Example.kt", "package fixture\nfun answer(): Int = 42")), version, emptySet(),
+    ))
+    kotlin.test.assertTrue(result.succeeded, result.diagnostics.toString())
+    val loader = result.classLoader()
+    kotlin.test.assertEquals(42, loader.loadClass("fixture.ExampleKt").getMethod("answer").invoke(null))
+    kotlin.test.assertNotNull(loader.getResourceAsStream("fixture/ExampleKt.class")).use { bytes ->
+      kotlin.test.assertTrue(bytes.readBytes().isNotEmpty())
+    }
+  }
+
 }

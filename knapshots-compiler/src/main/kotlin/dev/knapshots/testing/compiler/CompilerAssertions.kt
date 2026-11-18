@@ -30,7 +30,22 @@ public data class CompilerResult(
   val succeeded: Boolean,
   val diagnostics: List<CompilerDiagnostic> = emptyList(),
   val captures: Map<CompilerSnapshotKind, String> = emptyMap(),
-)
+  /** Compiled JVM class files keyed by their relative resource paths. */
+  val classFiles: Map<String, ByteArray> = emptyMap(),
+) {
+  /** Loads compiled classes and exposes their bytecode as classpath resources. */
+  public fun classLoader(parent: ClassLoader = Thread.currentThread().contextClassLoader): ClassLoader {
+    val files = classFiles.mapValues { it.value.copyOf() }
+    return object : ClassLoader(parent) {
+      override fun findClass(name: String): Class<*> {
+        val bytes = files[name.replace('.', '/') + ".class"] ?: throw ClassNotFoundException(name)
+        return defineClass(name, bytes, 0, bytes.size)
+      }
+      override fun getResourceAsStream(name: String): java.io.InputStream? =
+        files[name]?.inputStream() ?: super.getResourceAsStream(name)
+    }
+  }
+}
 
 /** Implemented by a compiler backend; Knapshots does not prescribe a compiler API. */
 public fun interface CompilerHost {
