@@ -21,20 +21,26 @@ public abstract class TargetPlugin {
 
 /** Optional Kotlin External FIR Support configuration. */
 public abstract class KefsConfiguration {
-  /** Maven group and artifact of the compiler plugin loaded by KEFS. */
-  public abstract val compilerPlugin: Property<String>
+  /** Maven group and artifact of the IDE plugin loaded by KEFS. */
+  public abstract val idePlugin: Property<String>
   public abstract val repository: DirectoryProperty
   public abstract val archive: RegularFileProperty
   public abstract val version: Property<String>
   public abstract val enabled: Property<Boolean>
 }
 
+/** IDE-side integration; additional delivery mechanisms can be added alongside KEFS. */
+public abstract class IdePluginConfiguration @Inject constructor(objects: ObjectFactory) {
+  public val kefs: KefsConfiguration = objects.newInstance(KefsConfiguration::class.java)
+  public fun kefs(action: Action<KefsConfiguration>) { action.execute(kefs) }
+}
+
 /** Project-wide settings for testing a Kotlin compiler plugin. */
 public abstract class KnapshotsExtension @Inject constructor(objects: ObjectFactory) {
-  public val plugin: TargetPlugin = objects.newInstance(TargetPlugin::class.java)
-  public val kefs: KefsConfiguration = objects.newInstance(KefsConfiguration::class.java)
-  public fun plugin(action: Action<TargetPlugin>) { action.execute(plugin) }
-  public fun kefs(action: Action<KefsConfiguration>) { action.execute(kefs) }
+  public val gradlePlugin: TargetPlugin = objects.newInstance(TargetPlugin::class.java)
+  public val idePlugin: IdePluginConfiguration = objects.newInstance(IdePluginConfiguration::class.java)
+  public fun gradlePlugin(action: Action<TargetPlugin>) { action.execute(gradlePlugin) }
+  public fun idePlugin(action: Action<IdePluginConfiguration>) { action.execute(idePlugin) }
   public abstract val runnerRoot: DirectoryProperty
   public abstract val wrapperRoot: DirectoryProperty
   public abstract val adapterArchive: RegularFileProperty
@@ -55,17 +61,17 @@ internal class EditorProjectArguments(
       "runnerRoot" to config.runnerRoot.orNull?.asFile?.absolutePath,
       "wrapperRoot" to config.wrapperRoot.orNull?.asFile?.absolutePath,
       "adapterArchive" to config.adapterArchive.orNull?.asFile?.absolutePath,
-      "kefsArchive" to config.kefs.archive.orNull?.asFile?.absolutePath,
+      "kefsArchive" to config.idePlugin.kefs.archive.orNull?.asFile?.absolutePath,
       "idePath" to config.idePath.orNull?.asFile?.absolutePath,
       "repository" to config.repository.orNull?.asFile?.absolutePath,
-      "kefsRepository" to config.kefs.repository.orNull?.asFile?.absolutePath,
+      "kefsRepository" to config.idePlugin.kefs.repository.orNull?.asFile?.absolutePath,
       "kotlinVersion" to config.kotlinVersion.orNull,
-      "pluginId" to config.plugin.id.orNull,
-      "pluginVersion" to config.plugin.version.orNull,
+      "pluginId" to config.gradlePlugin.id.orNull,
+      "pluginVersion" to config.gradlePlugin.version.orNull,
       "dependencies" to config.dependencies.orNull?.joinToString(";"),
-      "kefsVersion" to config.kefs.version.orNull,
-      "kefsCoordinate" to config.kefs.compilerPlugin.orNull,
-      "kefsEnabled" to config.kefs.enabled.orNull?.toString(),
+      "kefsVersion" to config.idePlugin.kefs.version.orNull,
+      "kefsCoordinate" to config.idePlugin.kefs.idePlugin.orNull,
+      "kefsEnabled" to config.idePlugin.kefs.enabled.orNull?.toString(),
     )
     val classpath = testClasspath.files.filter { it.exists() }.joinToString(java.io.File.pathSeparator) { it.absolutePath }
     return (values + ("classpath" to classpath.takeIf { it.isNotEmpty() })).mapNotNull { (key, value) -> value?.let { "-Dknapshots.editor.$key=$it" } }

@@ -21,7 +21,7 @@ class KPathsCompilerIntegrationTest {
       compilerArguments = listOf("-Xplugin=${artifact("kpaths-compiler-plugin")}"),
       captureArguments = { captures -> captures.flatMap { (kind, path) ->
         val option = when (kind) { CompilerSnapshotKind.FIR -> "firSnapshot"; CompilerSnapshotKind.IR -> "irSnapshot"; else -> error("Unsupported capture") }
-        listOf("-P", "plugin:dev.kpaths.compiler:$option=$path")
+        listOf("-P", "plugin:dev.kpaths.compiler-plugin:$option=$path")
       } },
     )
     val result = host.compile(CompilerRequest(listOf(CompilerSource("Example.kt", """

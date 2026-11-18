@@ -28,7 +28,7 @@ tasks.test {
       "wrapperRoot" to providers.gradleProperty("knapshots.editor.wrapperRoot").orElse(rootProject.projectDir.absolutePath).get(),
       "idePath" to providers.gradleProperty("knapshots.idePath").get(),
       "kotlinVersion" to libs.versions.kotlin.get(),
-      "pluginId" to "dev.kpaths.compiler",
+      "pluginId" to "dev.kpaths.gradle-plugin",
       "pluginVersion" to version,
       "repository" to kpaths.resolve("build/consumer-verification/repository").absolutePath,
       "kefsVersion" to providers.gradleProperty("knapshots.kefsVersion").get(),

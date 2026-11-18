@@ -43,15 +43,16 @@ public abstract class CompatibilityExtension {
 public class KnapshotsCompatibilityPlugin : Plugin<Project> {
   override fun apply(project: Project) {
     val editorProject = project.extensions.create("knapshots", KnapshotsExtension::class.java)
-    editorProject.plugin.id.convention(project.provider {
+    editorProject.gradlePlugin.id.convention(project.provider {
       project.extensions.findByType(GradlePluginDevelopmentExtension::class.java)
         ?.plugins?.mapNotNull { it.id?.takeIf(String::isNotBlank) }?.singleOrNull()
     })
-    editorProject.kefs.compilerPlugin.convention(project.provider {
-      editorProject.plugin.id.orNull?.let { id -> compilerPluginArtifact(project, id) }
+    // Until KEFS can map distinct artifact names, its IDE artifact uses the build artifact ID.
+    editorProject.idePlugin.kefs.idePlugin.convention(project.provider {
+      editorProject.gradlePlugin.id.orNull?.let { id -> compilerPluginArtifact(project, id) }
     })
     editorProject.wrapperRoot.convention(project.rootProject.layout.projectDirectory)
-    editorProject.plugin.version.convention(project.provider { project.version.toString().takeUnless { it == "unspecified" } })
+    editorProject.gradlePlugin.version.convention(project.provider { project.version.toString().takeUnless { it == "unspecified" } })
     editorProject.kotlinVersion.convention(project.provider {
       project.extensions.findByType(VersionCatalogsExtension::class.java)?.find("libs")?.orElse(null)
         ?.findVersion("kotlin")?.orElse(null)?.requiredVersion?.takeIf(String::isNotBlank)
@@ -60,9 +61,9 @@ public class KnapshotsCompatibilityPlugin : Plugin<Project> {
     editorProject.idePath.convention(project.layout.dir(
       project.providers.gradleProperty("knapshots.idePath").orElse(project.providers.environmentVariable("KNAPSHOTS_IDE_PATH")).map(project::file),
     ))
-    editorProject.kefs.archive.convention(project.layout.file(project.providers.environmentVariable("KNAPSHOTS_KEFS_ARCHIVE").map(project::file)))
+    editorProject.idePlugin.kefs.archive.convention(project.layout.file(project.providers.environmentVariable("KNAPSHOTS_KEFS_ARCHIVE").map(project::file)))
     editorProject.adapterArchive.convention(project.layout.file(project.providers.environmentVariable("KNAPSHOTS_IDE_ADAPTER_ARCHIVE").map(project::file)))
-    editorProject.kefs.version.convention(project.providers.gradleProperty("knapshots.kefsVersion"))
+    editorProject.idePlugin.kefs.version.convention(project.providers.gradleProperty("knapshots.kefsVersion"))
     // JUnit discovers the editor extension when its test dependency is present.
     project.tasks.withType(Test::class.java).configureEach { task ->
       task.systemProperty("junit.jupiter.extensions.autodetection.enabled", "true")
@@ -132,6 +133,7 @@ public abstract class CompilerCompatibilityTask : DefaultTask() {
     if (!report.successful) throw GradleException("Compiler compatibility checks failed.")
   }
 }
+
 
 /** Reads metadata only from an already-applied Kotlin compiler support plugin. */
 private fun compilerPluginArtifact(project: Project, id: String): String? {

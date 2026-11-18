@@ -98,27 +98,30 @@ once in Gradle:
 
 ```kotlin
 knapshots {
-  plugin { id.set("example.compiler") }
+  gradlePlugin { id.set("example.gradle-plugin") }
   repository.set(layout.projectDirectory.dir("build/local-maven"))
-  kefs {
-    compilerPlugin.set("example:compiler-plugin")
-    repository.set(layout.projectDirectory.dir("build/ide-maven"))
+  idePlugin {
+    kefs {
+      idePlugin.set("example:ide-plugin")
+      repository.set(layout.projectDirectory.dir("build/ide-maven"))
+    }
   }
 }
 ```
 
 The plugin ID tells the generated Gradle project which plugin to apply. The optional KEFS
-`compilerPlugin` identifies the compiler artifact that KEFS loads inside the IDE; it is written as
+`idePlugin` identifies the IDE artifact that KEFS loads; it is written as
 Maven group and artifact (`group:artifact`), without a version.
 
 Knapshots uses the test task's runtime classpath as the generated project's dependencies. It takes
 the Kotlin version from the `libs` version catalog's `kotlin` entry and the plugin version from
 the Gradle project version when available; each can be overridden explicitly. Projects with a
 separate consumer classpath or a plugin version unrelated to their project version should configure
-those values explicitly. When the project declares exactly one Gradle plugin using `java-gradle-plugin`, Knapshots can
-also infer its ID, so the `plugin` block can be omitted. If there are multiple declarations,
-select the plugin explicitly. If the selected Kotlin compiler Gradle plugin is already applied and exposes its compiler artifact,
-Knapshots can infer `compilerPlugin`; it never applies a plugin solely to discover it.
+those values explicitly. When the project declares exactly one Gradle plugin using
+`java-gradle-plugin`, Knapshots can also infer its ID, so the `gradlePlugin` block can be omitted.
+If there are multiple declarations, select the plugin explicitly. For the current KEFS lookup,
+Knapshots can infer the IDE artifact from an already applied Kotlin compiler Gradle plugin. A separately named IDE artifact requires an additional mapping and is not
+yet supported by this default lookup.
 
 The compatibility orchestrator supplies the selected IDE and, when KEFS is enabled, its downloaded
 archive to the editor driver. Configure `adapterArchive` with the Knapshots IntelliJ adapter ZIP;

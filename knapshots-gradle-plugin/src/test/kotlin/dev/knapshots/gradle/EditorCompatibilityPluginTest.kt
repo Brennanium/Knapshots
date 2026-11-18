@@ -41,8 +41,8 @@ class EditorCompatibilityPluginTest {
       val fixture = layout.projectDirectory.file("runtime.jar")
       tasks.named<Test>("test") { classpath = files(fixture) }
       knapshots {
-        plugin { id.set("example.plugin") }
-        kefs { compilerPlugin.set("example:compiler-plugin") }
+        gradlePlugin { id.set("example.plugin") }
+        idePlugin { kefs { idePlugin.set("example:ide-plugin") } }
         dependencies.add("example:library:1")
       }
       tasks.register("inspectTestConfiguration") {
@@ -51,7 +51,7 @@ class EditorCompatibilityPluginTest {
           check(test.systemProperties["junit.jupiter.extensions.autodetection.enabled"] == "true")
           val args = test.jvmArgumentProviders.flatMap { it.asArguments() }
           check("-Dknapshots.editor.pluginId=example.plugin" in args)
-          check("-Dknapshots.editor.kefsCoordinate=example:compiler-plugin" in args)
+          check("-Dknapshots.editor.kefsCoordinate=example:ide-plugin" in args)
           check("-Dknapshots.editor.pluginVersion=3.4.5" in args)
           check("-Dknapshots.editor.kotlinVersion=2.4.21" in args)
           check(args.any { it.startsWith("-Dknapshots.editor.classpath=") && it.endsWith("runtime.jar") })
