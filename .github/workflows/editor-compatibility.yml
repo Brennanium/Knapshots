@@ -7,6 +7,11 @@ on:
         description: Android Studio version, build, or latest-stable
         default: '2026.2.2.8'
         required: true
+      runner:
+        description: Select which operating systems to test
+        type: choice
+        options: [all, ubuntu, macos]
+        default: all
 
 permissions:
   contents: read
@@ -17,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-15]
+        os: ${{ fromJSON(inputs.runner == 'ubuntu' && '["ubuntu-latest"]' || inputs.runner == 'macos' && '["macos-15"]' || '["ubuntu-latest", "macos-15"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     steps:
@@ -56,3 +61,4 @@ jobs:
             knapshots-ide-runner/build/reports/tests/
             knapshots-ide-runner/build/test-results/
           if-no-files-found: warn
+          include-hidden-files: true

@@ -63,6 +63,7 @@ class IntellijAdapterIntegrationTest {
           repository.toString(),
           "-Pknapshots.enableIntellijAdapter",
           "-Pknapshots.idePath=$ide",
+          "-Pknapshots.isolatedBuildRoot=${project.directory.resolve(".knapshots/nested-build")}",
           "-Pknapshots.editor.project=${project.directory}",
           "-Pknapshots.editor.request=${project.requestPath}",
           "-Pknapshots.editor.response=${project.responsePath}",

@@ -70,6 +70,9 @@ tasks.runIde {
       "runIde inspection requires -Pknapshots.editor.project, -Pknapshots.editor.request, and -Pknapshots.editor.response."
     }
     trustProject(sandboxConfigDirectory.get().asFile, file(inspectedProject))
+    // The IntelliJ Gradle plugin may omit sandbox arguments for directories that do not exist.
+    sandboxSystemDirectory.get().asFile.mkdirs()
+    sandboxLogDirectory.get().asFile.mkdirs()
 
     // Keep Android Studio's first-run state inside the sandbox. CI has no user session to answer
     // consent or analytics prompts; local inspection runs should be just as non-interactive.
@@ -98,6 +101,7 @@ tasks.runIde {
   sandboxLogDirectory.set(sandbox.map { it.dir("log") })
   systemProperty("jb.consents.confirmation.enabled", "false")
   systemProperty("idea.initially.ask.config", "never")
+  systemProperty("jb.privacy.policy.text", "<!--999.999-->")
   systemProperty("disable.android.first.run", "true")
   systemProperty("disable.android.analytics.consent.dialog", "true")
   systemProperty("google.login.enable.startup.sign.in.dialog", "false")
