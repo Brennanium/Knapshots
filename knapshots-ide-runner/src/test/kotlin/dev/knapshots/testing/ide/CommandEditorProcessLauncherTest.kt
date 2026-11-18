@@ -8,6 +8,7 @@ import java.time.Duration
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.test.assertFalse
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 
@@ -54,6 +55,25 @@ class CommandEditorProcessLauncherTest {
 
     assertTrue(result.exitCode != 0)
     assertContains(result.summary.orEmpty(), "ide-process.log")
+  }
+
+  @Test fun `timeout stops the launched child process`(@TempDir directory: Path) {
+    org.junit.jupiter.api.Assumptions.assumeFalse(System.getProperty("os.name").startsWith("Windows"))
+    val project = EditorProjectMaterializer().materialize(
+      directory.resolve("project"), template,
+      EditorRequest(listOf(EditorSource("Example.kt", "class Example")), emptySet(), false),
+    )
+    val launcher = CommandEditorProcessLauncher(
+      command = { listOf("/bin/sh", "-c", "sleep 60 & echo \$! > child.pid; wait") },
+      timeout = Duration.ofSeconds(2),
+    )
+    val result = launcher.launch(project)
+    val pid = Files.readString(project.directory.resolve("child.pid")).trim().toLong()
+    assertEquals(-1, result.exitCode)
+    assertContains(result.summary.orEmpty(), "timed out")
+    val child = ProcessHandle.of(pid)
+    if (child.isPresent) child.get().onExit().get(10, java.util.concurrent.TimeUnit.SECONDS)
+    assertFalse(child.isPresent && child.get().isAlive)
   }
 
   private fun javaExecutable(): Path = Path.of(

@@ -36,9 +36,15 @@ public class CommandEditorProcessLauncher(
       }
       .start()
 
-    if (!process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
-      process.destroy()
-      if (!process.waitFor(5, TimeUnit.SECONDS)) process.destroyForcibly()
+    val finished = try {
+      process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)
+    } catch (interrupted: InterruptedException) {
+      terminateTree(process)
+      Thread.currentThread().interrupt()
+      throw interrupted
+    }
+    if (!finished) {
+      terminateTree(process)
       return EditorProcessResult(
         exitCode = -1,
         summary = "IDE process timed out after $timeout. Log: $log",
@@ -49,5 +55,20 @@ public class CommandEditorProcessLauncher(
       exitCode = exitCode,
       summary = if (exitCode == 0) null else "IDE process exited with code $exitCode. Log: $log",
     )
+  }
+
+  private fun terminateTree(process: Process) {
+    // Capture descendants before stopping the parent: once orphaned they may no longer be
+    // discoverable through ProcessHandle. Only processes launched by this invocation are targeted.
+    val children = process.descendants().use { it.toList() }.asReversed()
+    children.forEach { it.destroy() }
+    process.destroy()
+    try {
+      process.waitFor(5, TimeUnit.SECONDS)
+    } catch (_: InterruptedException) {
+      Thread.currentThread().interrupt()
+    }
+    children.filter { it.isAlive }.forEach { it.destroyForcibly() }
+    if (process.isAlive) process.destroyForcibly()
   }
 }
