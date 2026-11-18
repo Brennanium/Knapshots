@@ -21,7 +21,8 @@ public abstract class TargetPlugin {
 
 /** Optional Kotlin External FIR Support configuration. */
 public abstract class KefsConfiguration {
-  public abstract val coordinate: Property<String>
+  /** Maven group and artifact of the compiler plugin loaded by KEFS. */
+  public abstract val compilerPlugin: Property<String>
   public abstract val repository: DirectoryProperty
   public abstract val archive: RegularFileProperty
   public abstract val version: Property<String>
@@ -63,7 +64,7 @@ internal class EditorProjectArguments(
       "pluginVersion" to config.plugin.version.orNull,
       "dependencies" to config.dependencies.orNull?.joinToString(";"),
       "kefsVersion" to config.kefs.version.orNull,
-      "kefsCoordinate" to config.kefs.coordinate.orNull,
+      "kefsCoordinate" to config.kefs.compilerPlugin.orNull,
       "kefsEnabled" to config.kefs.enabled.orNull?.toString(),
     )
     val classpath = testClasspath.files.filter { it.exists() }.joinToString(java.io.File.pathSeparator) { it.absolutePath }

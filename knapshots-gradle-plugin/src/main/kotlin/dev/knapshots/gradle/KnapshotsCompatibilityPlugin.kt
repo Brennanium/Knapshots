@@ -47,6 +47,9 @@ public class KnapshotsCompatibilityPlugin : Plugin<Project> {
       project.extensions.findByType(GradlePluginDevelopmentExtension::class.java)
         ?.plugins?.mapNotNull { it.id?.takeIf(String::isNotBlank) }?.singleOrNull()
     })
+    editorProject.kefs.compilerPlugin.convention(project.provider {
+      editorProject.plugin.id.orNull?.let { id -> compilerPluginArtifact(project, id) }
+    })
     editorProject.wrapperRoot.convention(project.rootProject.layout.projectDirectory)
     editorProject.plugin.version.convention(project.provider { project.version.toString().takeUnless { it == "unspecified" } })
     editorProject.kotlinVersion.convention(project.provider {
@@ -127,5 +130,26 @@ public abstract class CompilerCompatibilityTask : DefaultTask() {
     report.selections.forEach { logger.lifecycle("Kotlin selector ${it.selector} -> ${it.version}") }
     report.entries.forEach { logger.lifecycle("Kotlin ${it.version}: ${it.result.checks}") }
     if (!report.successful) throw GradleException("Compiler compatibility checks failed.")
+  }
+}
+
+/** Reads metadata only from an already-applied Kotlin compiler support plugin. */
+private fun compilerPluginArtifact(project: Project, id: String): String? {
+  val plugin = project.plugins.findPlugin(id) ?: return null
+  return compilerPluginArtifact(plugin)
+}
+
+internal fun compilerPluginArtifact(plugin: Any): String? {
+  return try {
+    val support = Class.forName("org.jetbrains.kotlin.gradle.plugin.KotlinCompilerPluginSupportPlugin", false, plugin.javaClass.classLoader)
+    if (!support.isInstance(plugin)) return null
+    val artifact = support.getMethod("getPluginArtifact").invoke(plugin) ?: return null
+    val group = artifact.javaClass.getMethod("getGroupId").invoke(artifact) as? String
+    val name = artifact.javaClass.getMethod("getArtifactId").invoke(artifact) as? String
+    if (group.isNullOrBlank() || name.isNullOrBlank()) null else "$group:$name"
+  } catch (_: ReflectiveOperationException) {
+    null
+  } catch (_: LinkageError) {
+    null
   }
 }

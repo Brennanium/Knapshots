@@ -6,6 +6,7 @@ plugins {
 dependencies {
   implementation(project(":knapshots-compatibility"))
   testImplementation(kotlin("test"))
+  testImplementation("org.jetbrains.kotlin:kotlin-gradle-plugin-api:${libs.versions.kotlin.get()}")
   testImplementation(libs.junit.jupiter)
   testRuntimeOnly(libs.junit.platform.launcher)
 }

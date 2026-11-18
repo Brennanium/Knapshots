@@ -101,11 +101,15 @@ knapshots {
   plugin { id.set("example.compiler") }
   repository.set(layout.projectDirectory.dir("build/local-maven"))
   kefs {
-    coordinate.set("example:compiler-plugin")
+    compilerPlugin.set("example:compiler-plugin")
     repository.set(layout.projectDirectory.dir("build/ide-maven"))
   }
 }
 ```
+
+The plugin ID tells the generated Gradle project which plugin to apply. The optional KEFS
+`compilerPlugin` identifies the compiler artifact that KEFS loads inside the IDE; it is written as
+Maven group and artifact (`group:artifact`), without a version.
 
 Knapshots uses the test task's runtime classpath as the generated project's dependencies. It takes
 the Kotlin version from the `libs` version catalog's `kotlin` entry and the plugin version from
@@ -113,7 +117,8 @@ the Gradle project version when available; each can be overridden explicitly. Pr
 separate consumer classpath or a plugin version unrelated to their project version should configure
 those values explicitly. When the project declares exactly one Gradle plugin using `java-gradle-plugin`, Knapshots can
 also infer its ID, so the `plugin` block can be omitted. If there are multiple declarations,
-select the plugin explicitly. The KEFS coordinate cannot be reliably inferred from the runtime classpath.
+select the plugin explicitly. If the selected Kotlin compiler Gradle plugin is already applied and exposes its compiler artifact,
+Knapshots can infer `compilerPlugin`; it never applies a plugin solely to discover it.
 
 The compatibility orchestrator supplies the selected IDE and, when KEFS is enabled, its downloaded
 archive to the editor driver. Configure `adapterArchive` with the Knapshots IntelliJ adapter ZIP;
