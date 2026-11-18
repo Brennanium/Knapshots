@@ -16,6 +16,8 @@ import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.Optional
+import org.gradle.api.tasks.OutputFile
+import groovy.json.JsonOutput
 import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.testing.Test
 import org.gradle.api.artifacts.VersionCatalogsExtension
@@ -87,6 +89,7 @@ public class KnapshotsCompatibilityPlugin : Plugin<Project> {
       task.group = "verification"
       task.description = "Run compiler compatibility checks for selected Kotlin versions."
       task.driver.set(extension.compilerDriver)
+      task.reportFile.set(project.layout.buildDirectory.file("reports/knapshots/compiler-compatibility.json"))
     }
     project.tasks.register("editorCompatibility", EditorCompatibilityTask::class.java) { task ->
       task.group = "verification"
@@ -120,6 +123,16 @@ public abstract class CompilerCompatibilityTask : DefaultTask() {
   @get:Optional
   public abstract val driver: RegularFileProperty
 
+  @get:Input public abstract val platforms: ListProperty<String>
+  @get:OutputFile public abstract val reportFile: RegularFileProperty
+
+  @Option(option = "platform", description = "Comma-separated target platforms, passed to the regression driver")
+  public fun platform(value: String) {
+    val selected = value.split(',').map(String::trim)
+    require(selected.isNotEmpty() && selected.all { it.matches(Regex("[A-Za-z0-9_-]+")) } && selected.distinct().size == selected.size) { "Invalid platform list: $value" }
+    platforms.set(selected)
+  }
+
   @Option(option = "kotlin-version", description = "Kotlin version or dev-family selector; may be repeated")
   public fun kotlinVersion(values: List<String>) { kotlinVersions.addAll(values) }
 
@@ -132,14 +145,31 @@ public abstract class CompilerCompatibilityTask : DefaultTask() {
     )
     if (!Files.isExecutable(executable.toPath())) throw GradleException("Compiler compatibility driver is not executable: $executable")
     val report = CompilerCompatibility(driver = CompilerCompatibilityDriver { version ->
-      val process = ProcessBuilder(executable.absolutePath, "--kotlin-version", version)
-        .directory(executable.parentFile).redirectErrorStream(true).start()
-      process.inputStream.bufferedReader().useLines { lines -> lines.forEach { logger.lifecycle(it) } }
-      val status = if (process.waitFor() == 0) CompatibilityStatus.PASSED else CompatibilityStatus.FAILED
-      CompatibilityResult(mapOf("driver" to status))
+      val args = mutableListOf(executable.absolutePath, "--kotlin-version", version)
+      platforms.getOrElse(emptyList()).takeIf { it.isNotEmpty() }?.let { args.addAll(listOf("--platform", it.joinToString(","))) }
+      val process = ProcessBuilder(args).directory(executable.parentFile).redirectErrorStream(true).start()
+      val checks = linkedMapOf<String, CompatibilityStatus>()
+      val marker = Regex("^KNAPSHOTS_CHECK ([A-Za-z0-9_-]+) (passed|failed|not-run)$")
+      process.inputStream.bufferedReader().useLines { lines -> lines.forEach { line ->
+        logger.lifecycle(line)
+        marker.matchEntire(line)?.let { match ->
+          val status = when (match.groupValues[2]) { "passed" -> CompatibilityStatus.PASSED; "failed" -> CompatibilityStatus.FAILED; else -> CompatibilityStatus.NOT_RUN }
+          check(checks.put(match.groupValues[1], status) == null) { "Duplicate compatibility check: ${match.groupValues[1]}" }
+        }
+      } }
+      val exit = process.waitFor()
+      if (checks.isEmpty() || exit != 0) checks["driver"] = if (exit == 0) CompatibilityStatus.PASSED else CompatibilityStatus.FAILED
+      CompatibilityResult(checks)
     }).run(selectors)
     report.selections.forEach { logger.lifecycle("Kotlin selector ${it.selector} -> ${it.version}") }
     report.entries.forEach { logger.lifecycle("Kotlin ${it.version}: ${it.result.checks}") }
+    val output = reportFile.get().asFile.toPath()
+    Files.createDirectories(output.parent)
+    Files.writeString(output, JsonOutput.prettyPrint(JsonOutput.toJson(mapOf(
+      "selections" to report.selections.map { mapOf("selector" to it.selector, "version" to it.version) },
+      "entries" to report.entries.map { entry -> mapOf("version" to entry.version, "checks" to entry.result.checks.mapValues { it.value.name.lowercase() }, "detail" to entry.result.detail) },
+      "successful" to report.successful,
+    ))) + "\n")
     if (!report.successful) throw GradleException("Compiler compatibility checks failed.")
   }
 }

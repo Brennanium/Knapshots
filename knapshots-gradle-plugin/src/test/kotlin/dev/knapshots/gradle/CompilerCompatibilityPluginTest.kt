@@ -27,6 +27,23 @@ class CompilerCompatibilityPluginTest {
     assertEquals(listOf("2.4.20", "2.4.21"), Files.readAllLines(dir.resolve("versions.txt")))
   }
 
+  @Test fun `passes platform selection and records individual check results`(@TempDir dir: Path) {
+    Files.writeString(dir.resolve("settings.gradle.kts"), "rootProject.name = \"consumer\"")
+    val driver = dir.resolve("driver.sh")
+    Files.writeString(driver, "#!/bin/sh\nprintf '%s\\n' \"\$*\" > args.txt\necho 'KNAPSHOTS_CHECK jvm passed'\necho 'KNAPSHOTS_CHECK native not-run'\n")
+    check(driver.toFile().setExecutable(true))
+    Files.writeString(dir.resolve("build.gradle.kts"), """
+      plugins { id("dev.knapshots.compatibility") }
+      knapshotsCompatibility { compilerDriver.set(layout.projectDirectory.file("driver.sh")) }
+    """.trimIndent())
+    runner(dir).withArguments("compilerCompatibility", "--kotlin-version", "2.4.21", "--platform", "jvm,native").build()
+    assertContains(Files.readString(dir.resolve("args.txt")), "--kotlin-version 2.4.21 --platform jvm,native")
+    val report = Files.readString(dir.resolve("build/reports/knapshots/compiler-compatibility.json"))
+    assertContains(report, "\"jvm\": \"passed\"")
+    assertContains(report, "\"native\": \"not_run\"")
+    assertContains(report, "\"successful\": true")
+  }
+
   @Test fun `a missing driver fails clearly`(@TempDir dir: Path) {
     Files.writeString(dir.resolve("settings.gradle.kts"), "rootProject.name = \"consumer\"")
     Files.writeString(dir.resolve("build.gradle.kts"), "plugins { id(\"dev.knapshots.compatibility\") }")

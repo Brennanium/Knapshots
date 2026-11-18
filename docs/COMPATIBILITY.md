@@ -4,7 +4,7 @@ The intended Gradle entry points select toolchains per invocation:
 
 ```shell
 ./gradlew editorCompatibility --ide-version 2026.2.2.8
-./gradlew compilerCompatibility --kotlin-version 2.4.21
+./gradlew compilerCompatibility --kotlin-version 2.4.21 --platform jvm,native
 ```
 
 These tasks are experimental and currently require project-provided drivers. Compiler selectors accept dev families such as `2.5.0-dev*`, reporting the concrete version selected. IDE selectors accept a full version or build and `latest-stable`.
@@ -33,7 +33,7 @@ knapshotsCompatibility {
 }
 ```
 
-The compiler driver receives `--kotlin-version <resolved version>`, and the editor driver receives `--ide-path <validated installation>`. With KEFS enabled, the editor driver also receives `--ide-kotlin-version` and the selected `--kefs-version`. A nonzero exit code fails the task. The IDE task resolves the official feed, caches the SHA-256-verified archive, and provisions a temporary installation. `idePath` and `releaseFeed` are optional overrides; the supplied IDE must match the selected build.
+The compiler driver receives `--kotlin-version <resolved version>` and, when selected, `--platform <comma-separated platforms>`. It can report individual checks by printing `KNAPSHOTS_CHECK <name> passed`, `failed`, or `not-run`; Knapshots writes their results to `build/reports/knapshots/compiler-compatibility.json`. The editor driver receives `--ide-path <validated installation>`. With KEFS enabled, the editor driver also receives `--ide-kotlin-version` and the selected `--kefs-version`. A nonzero exit code fails the task. The IDE task resolves the official feed, caches the SHA-256-verified archive, and provisions a temporary installation. `idePath` and `releaseFeed` are optional overrides; the supplied IDE must match the selected build.
 
 The task writes `build/reports/knapshots/editor-compatibility.json` with the resolved release, result, and any selected KEFS/compiler versions. Its opt-in KEFS discovery selects a compatible Marketplace release and reads its mapping for Android Studio's special compiler versions; the driver remains responsible for installing/configuring KEFS and its compiler plugin.
 
