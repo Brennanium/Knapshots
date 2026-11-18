@@ -280,7 +280,7 @@ public fun assertCompiler(
   assertCompilerSnapshots(source, compilerVersion, expected) { _, _, _ -> captures }
 }
 
-private fun discoverInlineSnapshotLocation(): InlineSnapshotLocation {
+public fun discoverInlineSnapshotLocation(): InlineSnapshotLocation {
   val root = java.nio.file.Path.of(System.getProperty("user.dir")).toAbsolutePath()
   val sourceDirectory = root.resolve("src")
   val roots = if (java.nio.file.Files.isDirectory(sourceDirectory)) {

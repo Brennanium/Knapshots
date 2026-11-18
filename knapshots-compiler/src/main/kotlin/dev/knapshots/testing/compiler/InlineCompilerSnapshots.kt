@@ -39,6 +39,8 @@ internal object InlineCompilerSnapshots {
     versioned: Boolean,
     expectedSource: String? = null,
     compiledSourceLine: Boolean = false,
+    assertionName: String = "assertCompiler",
+    argumentNames: Map<CompilerSnapshotKind, String> = mapOf(CompilerSnapshotKind.FIR to "fir", CompilerSnapshotKind.IR to "ir"),
   ) = synchronized(lock) {
     require(values.isNotEmpty())
     val original = Files.readString(file)
@@ -63,10 +65,10 @@ internal object InlineCompilerSnapshots {
       val parsed = KtPsiFactory(environment.project).createFile(original)
       fun lineOf(offset: Int) = original.take(offset).count { it == '\n' } + 1
       val candidates = PsiTreeUtil.collectElementsOfType(parsed, KtCallExpression::class.java).filter {
-        it.calleeExpression?.text == "assertCompiler" &&
+        it.calleeExpression?.text == assertionName &&
           currentLine in lineOf(it.textRange.startOffset)..lineOf(it.textRange.endOffset)
       }
-      require(candidates.size == 1) { "Expected exactly one assertCompiler call at $file:$line, found ${candidates.size}." }
+      require(candidates.size == 1) { "Expected exactly one $assertionName call at $file:$line, found ${candidates.size}." }
       val call = candidates.single()
       val args = call.valueArgumentList ?: error("assertCompiler has no argument list at $file:$line.")
       val edits = mutableListOf<Triple<Int, Int, String>>()
@@ -87,7 +89,7 @@ internal object InlineCompilerSnapshots {
         edits += Triple(expression.textRange.startOffset, expression.textRange.endOffset, literal(value))
       }
       for ((kind, value) in values) {
-        val name = when (kind) { CompilerSnapshotKind.FIR -> "fir"; CompilerSnapshotKind.IR -> "ir"; else -> error("Unsupported inline snapshot kind: ${kind.name}.") }
+        val name = argumentNames[kind] ?: error("Unsupported inline snapshot kind: ${kind.name}.")
         val matches = args.arguments.filter { it.getArgumentName()?.asName?.asString() == name }
         require(matches.size <= 1) { "More than one $name argument at $file:$line." }
         val argument = matches.singleOrNull()
