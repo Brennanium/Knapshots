@@ -69,12 +69,6 @@ jobs:
           name: editor-compatibility-${{ matrix.os }}
           path: |
             knapshots/ci/kpaths-editor/build/reports/knapshots/
-            knapshots/build/ide-integration/**/.knapshots/ide-process.log
-            knapshots/build/ide-integration/**/.knapshots/editor-request.properties
-            knapshots/build/ide-integration/**/.knapshots/editor-response.properties
-            knapshots/build/ide-integration/**/nested-build/knapshots-intellij/editor-inspection-sandbox/log/
-            knapshots/knapshots-ide-runner/build/test-results/
-            knapshots/build/kpaths-editor-results/
             kpaths/kpaths-kefs-ide-fixture/build/consumer-probe*.log
             kpaths/kpaths-kefs-ide-fixture/build/consumer-probe*.txt
             kpaths/kpaths-kefs-ide-fixture/build/ide-probe/**/log/

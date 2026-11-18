@@ -69,7 +69,11 @@ class KPathsEditorIntegrationTest {
       ) },
       timeout = Duration.ofMinutes(12), environment = mapOf("JAVA_HOME" to javaHome.toString()),
     )
-    val host = RunnerEditorSourceHost(template, launcher, Files.createDirectories(repository.resolve("build/ide-integration")))
+    val host = RunnerEditorSourceHost(
+      template, launcher, Files.createDirectories(repository.resolve("build/ide-integration")),
+      reportDirectory = System.getProperty("knapshots.reportDirectory")?.let(Path::of),
+      failureReportFiles = listOf("nested-build/knapshots-intellij/editor-inspection-sandbox/log/idea.log"),
+    )
     assertEditor(
       source = """
         import dev.kpaths.annotations.Pathable

@@ -33,6 +33,8 @@ public abstract class CompatibilityExtension {
   public abstract val useKefs: Property<Boolean>
   public abstract val kefsVersion: Property<String>
   public abstract val useXvfb: Property<Boolean>
+  /** JUnit XML produced by the editor test invocation to collect for each scenario. */
+  public abstract val scenarioJUnitXml: RegularFileProperty
 }
 
 public class KnapshotsCompatibilityPlugin : Plugin<Project> {
@@ -57,6 +59,12 @@ public class KnapshotsCompatibilityPlugin : Plugin<Project> {
       task.kefsVersion.set(extension.kefsVersion)
       task.useXvfb.set(extension.useXvfb)
       task.reportFile.set(project.layout.buildDirectory.file("reports/knapshots/editor-compatibility.json"))
+    }
+    project.tasks.register("collectEditorScenario", CollectEditorScenarioTask::class.java) { task ->
+      task.group = "verification"
+      task.description = "Collect and validate a JUnit result for an editor scenario."
+      task.junitXml.set(extension.scenarioJUnitXml)
+      task.outputDirectory.set(project.layout.buildDirectory.dir("reports/knapshots/scenarios"))
     }
   }
 }

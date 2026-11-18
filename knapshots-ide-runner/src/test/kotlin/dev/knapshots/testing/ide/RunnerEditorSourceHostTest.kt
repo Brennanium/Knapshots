@@ -100,6 +100,43 @@ class RunnerEditorSourceHostTest {
     assertTrue(Files.exists(checkNotNull(generatedRoot)))
   }
 
+  @Test fun `collects protocol and diagnostic files on an assertion failure`(@TempDir directory: Path) {
+    val reports = directory.resolve("reports")
+    val host = RunnerEditorSourceHost(
+      template = template,
+      temporaryParent = directory.resolve("temporary"),
+      retention = EditorProjectRetention.NEVER,
+      reportDirectory = reports,
+      failureReportFiles = listOf("nested-build/idea.log"),
+      launcher = EditorProcessLauncher { project ->
+        Files.writeString(project.directory.resolve(".knapshots/ide-process.log"), "launcher log")
+        val log = project.directory.parent.resolve("nested-build/idea.log")
+        Files.createDirectories(log.parent)
+        Files.writeString(log, "IDE log")
+        EditorInspectionProtocol.writeResponse(
+          EditorInspectionResponse.Completed(null, mapOf("Example" to ReferenceObservation.Resolved())),
+          project.responsePath,
+        )
+        EditorProcessResult(0)
+      },
+    )
+    assertFailsWith<AssertionError> {
+      assertEditor("class Example", host, checkDiagnostics = false) { reference("Example").isUnresolved() }
+    }
+    val files = Files.walk(reports).use { it.filter(Files::isRegularFile).toList() }
+    assertTrue(files.any { it.fileName.toString() == "editor-request.properties" })
+    assertTrue(files.any { it.fileName.toString() == "editor-response.properties" })
+    assertTrue(files.any { it.fileName.toString() == "ide-process.log" && Files.readString(it) == "launcher log" })
+    assertTrue(files.any { it.fileName.toString() == "idea.log" && Files.readString(it) == "IDE log" })
+  }
+
+  @Test fun `rejects escaping report paths`(@TempDir directory: Path) {
+    assertFailsWith<IllegalArgumentException> {
+      RunnerEditorSourceHost(template, EditorProcessLauncher { EditorProcessResult(0) },
+        reportDirectory = directory, failureReportFiles = listOf("../outside"))
+    }
+  }
+
   @Test fun `failed adapter responses are not treated as unavailable observations`(@TempDir directory: Path) {
     val host = RunnerEditorSourceHost(
       template = template,

@@ -8,6 +8,7 @@ import dev.knapshots.testing.editor.EditorSourceHost
 import dev.knapshots.testing.editor.ReferenceObservation
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.util.Comparator
 
 /** Runs an IDE-side adapter against one materialized project and returns only after it exits. */
@@ -51,7 +52,19 @@ public class RunnerEditorSourceHost(
   private val launcher: EditorProcessLauncher,
   private val temporaryParent: Path? = null,
   private val retention: EditorProjectRetention = EditorProjectRetention.ON_FAILURE,
+  /** Optional destination for per-inspection protocol files and failure logs. */
+  private val reportDirectory: Path? = null,
+  /** Extra files relative to the temporary inspection directory to collect on failure. */
+  private val failureReportFiles: List<String> = emptyList(),
 ) : EditorSourceHost {
+  init {
+    failureReportFiles.forEach { path ->
+      val relative = Path.of(path)
+      require(path.isNotBlank() && !relative.isAbsolute && relative.none { it.toString() == ".." }) {
+        "Failure report paths must be relative and cannot escape the inspection directory: $path"
+      }
+    }
+  }
   override fun open(request: EditorRequest): EditorObservations {
     val parent = temporaryParent ?: Path.of(System.getProperty("java.io.tmpdir"))
     Files.createDirectories(parent)
@@ -79,18 +92,43 @@ public class RunnerEditorSourceHost(
         is EditorInspectionResponse.Completed -> {
           returnedSession = true
           return RecordedEditorObservations(response) { assertionsSucceeded ->
-            if (shouldDelete(assertionsSucceeded)) deleteRecursively(temporaryDirectory)
+            try {
+              collectReport(temporaryDirectory, assertionsSucceeded)
+            } finally {
+              if (shouldDelete(assertionsSucceeded)) deleteRecursively(temporaryDirectory)
+            }
           }
         }
       }
     } finally {
-      if (!returnedSession && shouldDelete(successful = false)) deleteRecursively(temporaryDirectory)
+      if (!returnedSession) {
+        try {
+          collectReport(temporaryDirectory, successful = false)
+        } finally {
+          if (shouldDelete(successful = false)) deleteRecursively(temporaryDirectory)
+        }
+      }
     }
   }
 
   private fun shouldDelete(successful: Boolean): Boolean =
     retention == EditorProjectRetention.NEVER ||
       (retention == EditorProjectRetention.ON_FAILURE && successful)
+
+  private fun collectReport(temporaryDirectory: Path, successful: Boolean) {
+    val destination = reportDirectory?.resolve(temporaryDirectory.fileName.toString()) ?: return
+    val files = mutableListOf("project/.knapshots/editor-request.properties", "project/.knapshots/editor-response.properties")
+    if (!successful) files += listOf("project/.knapshots/ide-process.log") + failureReportFiles
+    files.forEach { relative ->
+      val source = temporaryDirectory.resolve(relative).normalize()
+      if (Files.isRegularFile(source, java.nio.file.LinkOption.NOFOLLOW_LINKS) &&
+        source.toRealPath().startsWith(temporaryDirectory.toRealPath())) {
+        val target = destination.resolve(relative)
+        Files.createDirectories(target.parent)
+        Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING)
+      }
+    }
+  }
 
   private fun deleteRecursively(directory: Path) {
     if (!Files.exists(directory)) return
