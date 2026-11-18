@@ -46,7 +46,7 @@ assertCompiler("class Example") {
 }
 ```
 
-For FIR or IR, pass the desired expectations as `fir` and `ir`. Use `record = SnapshotRecording.MISSING` to record missing inline snapshots, then review the changes and rerun the test. An explicit `CompilerHost` remains available for integrations that need a different compiler invocation. The embedded host runs the compiler on the test runtime classpath; it does not download another compiler when a version is requested.
+For FIR or IR, pass the desired expectations as `fir` and `ir`. Use `record = SnapshotRecording.MISSING` to record missing inline snapshots, then review the changes and rerun the test. To set a default for a test project, use `knapshots { recording.set("missing") }` or `-Pknapshots.recording=missing`; an explicit assertion argument overrides it. `recordCompilerVersion.set(true)` or `-Pknapshots.recordCompilerVersion=true` records version-specific overrides. The default is `none` when no recording mode is configured. An explicit `CompilerHost` remains available for integrations that need a different compiler invocation. The embedded host runs the compiler on the test runtime classpath; it does not download another compiler when a version is requested.
 
 This setup is experimental and requires the Knapshots Gradle plugin and compiler module. KPaths' opt-in cross-project fixture exercises successful compilation, diagnostics, FIR/IR snapshots, version-specific expectations, and inline recording against its real compiler plugin.
 

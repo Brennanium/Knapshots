@@ -40,8 +40,8 @@ public fun assertCompiler(
   source: String,
   fir: SnapshotExpectation? = null,
   ir: SnapshotExpectation? = null,
-  record: SnapshotRecording = SnapshotRecording.NONE,
-  recordVersion: Boolean = false,
+  record: SnapshotRecording = configuredRecording(),
+  recordVersion: Boolean = configuredRecordVersion(),
   location: InlineSnapshotLocation? = null,
 ) {
   assertCompiler(source, KotlinCompilerVersion.VERSION, configuredCompiler(), fir, ir, record, recordVersion, location)
@@ -51,3 +51,12 @@ public fun assertCompiler(
 public fun assertCompiler(source: String, block: CompilerExpectations.() -> Unit) {
   assertCompiler(source, KotlinCompilerVersion.VERSION, configuredCompiler(), block = block)
 }
+
+private fun configuredRecording(): SnapshotRecording {
+  val value = System.getProperty("knapshots.compiler.record", "none")
+  return try { SnapshotRecording.valueOf(value.uppercase(java.util.Locale.ROOT)) }
+  catch (_: IllegalArgumentException) { error("Invalid knapshots.compiler.record '$value'; use none, missing, failed, or all.") }
+}
+
+private fun configuredRecordVersion(): Boolean =
+  System.getProperty("knapshots.compiler.recordVersion", "false").toBooleanStrict()

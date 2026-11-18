@@ -44,6 +44,8 @@ public abstract class CompatibilityExtension {
 public class KnapshotsCompatibilityPlugin : Plugin<Project> {
   override fun apply(project: Project) {
     val editorProject = project.extensions.create("knapshots", KnapshotsExtension::class.java)
+    editorProject.recording.convention(project.providers.gradleProperty("knapshots.recording"))
+    editorProject.recordCompilerVersion.convention(project.providers.gradleProperty("knapshots.recordCompilerVersion").map { it.toBooleanStrict() })
     editorProject.wrapperRoot.convention(project.rootProject.layout.projectDirectory)
     // Resolve project-derived defaults after the build script configures its plugins. Store values,
     // not Project objects, in the test argument provider so configuration caching remains possible.

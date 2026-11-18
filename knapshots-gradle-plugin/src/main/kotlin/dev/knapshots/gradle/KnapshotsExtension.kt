@@ -62,6 +62,10 @@ public abstract class KnapshotsExtension @Inject constructor(objects: ObjectFact
   public abstract val repository: DirectoryProperty
   public abstract val kotlinVersion: Property<String>
   public abstract val dependencies: ListProperty<String>
+  /** Default inline snapshot recording mode: none, missing, failed, or all. */
+  public abstract val recording: Property<String>
+  /** Record a compiler-version override rather than replacing the shared snapshot. */
+  public abstract val recordCompilerVersion: Property<Boolean>
 }
 
 internal class EditorProjectArguments(
@@ -92,6 +96,8 @@ internal class EditorProjectArguments(
     "pluginId" to config.compilerPlugin.id,
     "firOption" to config.compilerPlugin.firOption,
     "irOption" to config.compilerPlugin.irOption,
+    "record" to config.recording,
+    "recordVersion" to config.recordCompilerVersion.map { it.toString() },
   )
   @get:Input val configurationArguments: List<String> get() =
     arguments("editor", editorValues) + arguments("compiler", compilerValues)

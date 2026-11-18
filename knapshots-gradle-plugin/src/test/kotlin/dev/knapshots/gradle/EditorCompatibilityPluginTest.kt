@@ -15,6 +15,8 @@ class EditorCompatibilityPluginTest {
     Files.writeString(dir.resolve("build.gradle.kts"), """
       plugins { java; id("dev.knapshots.compatibility") }
       knapshots {
+        recording.set("missing")
+        recordCompilerVersion.set(true)
         compilerPlugin {
           artifact.set(layout.projectDirectory.file("compiler.jar"))
           id.set("example.compiler-plugin")
@@ -72,6 +74,8 @@ class EditorCompatibilityPluginTest {
           firOption.set("firSnapshot")
           irOption.set("irSnapshot")
         }
+        recording.set("missing")
+        recordCompilerVersion.set(true)
         idePlugin { kefs { idePlugin.set("example:ide-plugin") } }
         dependencies.add("example:library:1")
       }
@@ -85,6 +89,8 @@ class EditorCompatibilityPluginTest {
           check(args.any { it.startsWith("-Dknapshots.compiler.pluginJar=") && it.endsWith("compiler.jar") })
           check("-Dknapshots.compiler.firOption=firSnapshot" in args)
           check("-Dknapshots.compiler.irOption=irSnapshot" in args)
+          check("-Dknapshots.compiler.record=missing" in args)
+          check("-Dknapshots.compiler.recordVersion=true" in args)
           check(args.any { it.startsWith("-Dknapshots.compiler.classpath=") && it.endsWith("runtime.jar") })
           check("-Dknapshots.editor.kefsCoordinate=example:ide-plugin" in args)
           check("-Dknapshots.editor.pluginVersion=3.4.5" in args)
