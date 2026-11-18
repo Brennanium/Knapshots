@@ -83,7 +83,8 @@ public abstract class CompilerCompatibilityTask : DefaultTask() {
     if (!Files.isExecutable(executable.toPath())) throw GradleException("Compiler compatibility driver is not executable: $executable")
     val report = CompilerCompatibility(driver = CompilerCompatibilityDriver { version ->
       val process = ProcessBuilder(executable.absolutePath, "--kotlin-version", version)
-        .directory(executable.parentFile).inheritIO().start()
+        .directory(executable.parentFile).redirectErrorStream(true).start()
+      process.inputStream.bufferedReader().useLines { lines -> lines.forEach { logger.lifecycle(it) } }
       val status = if (process.waitFor() == 0) CompatibilityStatus.PASSED else CompatibilityStatus.FAILED
       CompatibilityResult(mapOf("driver" to status))
     }).run(selectors)

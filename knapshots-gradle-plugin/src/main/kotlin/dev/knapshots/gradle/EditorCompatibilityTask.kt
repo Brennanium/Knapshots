@@ -107,8 +107,10 @@ public abstract class EditorCompatibilityTask : DefaultTask() {
           require(platform == IdePlatform.LINUX_X64) { "Xvfb is only supported on Linux." }
           args.addAll(0, listOf("xvfb-run", "-a"))
         }
-        val process = ProcessBuilder(args).directory(executable.parentFile).inheritIO().start()
-        if (process.waitFor() != 0) throw GradleException("Editor compatibility driver failed for ${release.version}.")
+        val process = ProcessBuilder(args).directory(executable.parentFile).redirectErrorStream(true).start()
+        process.inputStream.bufferedReader().useLines { lines -> lines.forEach { logger.lifecycle(it) } }
+        val exitCode = process.waitFor()
+        if (exitCode != 0) throw GradleException("Editor compatibility driver failed for ${release.version} (exit $exitCode).")
       } finally { archive?.let(Files::deleteIfExists) }
     }
     val local = idePath.orNull?.asFile?.toPath()
