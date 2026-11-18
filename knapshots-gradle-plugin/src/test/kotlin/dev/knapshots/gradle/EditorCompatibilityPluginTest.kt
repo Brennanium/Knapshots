@@ -19,7 +19,7 @@ class EditorCompatibilityPluginTest {
       <download><link>https://example.test/a-mac_arm.dmg</link><checksum>${"a".repeat(64)}</checksum></download></item></releases>"""
     Files.writeString(dir.resolve("releases.xml"), feed)
     val driver = dir.resolve("editor-driver.sh")
-    Files.writeString(driver, "#!/bin/sh\nprintf '%s' \"\$2\" > ide.txt\n")
+    Files.writeString(driver, "#!/bin/sh\nprintf '%s' \"\$2\" > ide.txt\necho editor-driver-ran\n")
     check(driver.toFile().setExecutable(true))
     Files.writeString(dir.resolve("build.gradle.kts"), """
       plugins { id("dev.knapshots.compatibility") }
@@ -32,6 +32,7 @@ class EditorCompatibilityPluginTest {
     val result = GradleRunner.create().withProjectDir(dir.toFile()).withPluginClasspath()
       .withArguments("editorCompatibility", "--ide-version", "2026.2.2.8").build()
     assertContains(result.output, "262.123")
+    assertContains(result.output, "editor-driver-ran")
     assertEquals(ide.toRealPath(), Path.of(Files.readString(dir.resolve("ide.txt"))).toRealPath())
     assertContains(Files.readString(dir.resolve("build/reports/knapshots/editor-compatibility.json")), "\"result\": \"passed\"")
   }

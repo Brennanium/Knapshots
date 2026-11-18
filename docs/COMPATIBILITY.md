@@ -52,10 +52,13 @@ result, and any selected KEFS/compiler versions. Its opt-in KEFS discovery selec
 Marketplace release and reads its mapping for Android Studio's special compiler versions; the
 driver remains responsible for installing/configuring KEFS and its compiler plugin.
 
-Knapshots currently has a local Android Studio imported-project smoke test. It does not yet have
-a compiler backend, automatic KEFS installation, or verified Linux CI coverage. The new
-orchestration is covered by synthetic tests and has not yet been validated against the real KPaths
-driver and Marketplace. Selecting an IDE does not itself make an adapter or compiler plugin compatible
+Knapshots has a local Android Studio imported-project smoke test. A macOS integration run also
+invoked KPaths' existing KEFS driver through `editorCompatibility` using Android Studio
+2026.2.2.8, KEFS 0.5.0-262, and IDE Kotlin 2.4.20-ij262-52. The enabled, disabled, and expected
+diagnostic imported-project scenarios passed. That run used an installed IDE override; it did not
+verify distribution download, Linux/Xvfb, or a KPaths migration away from its existing scripts.
+Knapshots does not yet have a compiler backend, automatic KEFS installation, or verified Linux
+CI coverage. Selecting an IDE does not itself make an adapter or compiler plugin compatible
 with its bundled compiler; a run must fail clearly if it lacks compatible artifacts or a driver.
 
 Keep version selection, distribution resolution, platform launch, and project-specific assertions
