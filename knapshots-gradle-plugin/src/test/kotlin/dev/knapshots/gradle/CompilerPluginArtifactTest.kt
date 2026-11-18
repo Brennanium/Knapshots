@@ -21,10 +21,12 @@ class CompilerPluginArtifactTest {
 
   @Test fun `reads the compiler artifact from Kotlin plugin metadata`() {
     assertEquals("example.group:compiler-artifact", compilerPluginArtifact(ExamplePlugin()))
+    assertEquals("example.compiler", compilerPluginId(ExamplePlugin()))
   }
 
   @Test fun `does not treat arbitrary similarly named objects as Kotlin plugins`() {
     val unrelated = object { fun getPluginArtifact() = "example:wrong" }
     assertNull(compilerPluginArtifact(unrelated))
+    assertNull(compilerPluginId(unrelated))
   }
 }

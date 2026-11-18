@@ -282,7 +282,14 @@ public fun assertCompiler(
 
 private fun discoverInlineSnapshotLocation(): InlineSnapshotLocation {
   val root = java.nio.file.Path.of(System.getProperty("user.dir")).toAbsolutePath()
-  val roots = listOf(root.resolve("src/test/kotlin"), root.resolve("src/test/java"))
+  val sourceDirectory = root.resolve("src")
+  val roots = if (java.nio.file.Files.isDirectory(sourceDirectory)) {
+    java.nio.file.Files.list(sourceDirectory).use { directories ->
+      directories.filter { java.nio.file.Files.isDirectory(it) && (it.fileName.toString() == "test" || it.fileName.toString().endsWith("Test")) }
+        .flatMap { directory -> java.util.stream.Stream.of(directory.resolve("kotlin"), directory.resolve("java")) }
+        .toList()
+    }
+  } else emptyList()
   val caller = Throwable().stackTrace.firstNotNullOfOrNull { frame ->
     if (frame.lineNumber <= 0 || frame.fileName == null || frame.className.startsWith("dev.knapshots.testing.compiler.CompilerAssertions")) return@firstNotNullOfOrNull null
     val packagePath = frame.className.substringBeforeLast('.', "").replace('.', '/')

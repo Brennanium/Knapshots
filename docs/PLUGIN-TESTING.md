@@ -18,16 +18,37 @@ KPaths is one example: its experimental Gradle plugin ID is `dev.kpaths.gradle-p
 | Assertion | What it checks | What the current integration needs |
 | --- | --- | --- |
 | `assertSnapshot` | A captured value compared with an expected value. | A snapshot strategy, a value, and an expectation. No compiler or IDE is required. |
-| `assertCompiler` | Compilation outcome, diagnostics, and optionally compiler output such as FIR or IR. | Source, a compiler version, and a `CompilerHost`. The embedded host needs compiler plugin arguments and any compilation dependencies on its configured classpath. Capturing FIR or IR also needs plugin-specific capture arguments. |
+| `assertCompiler` | Compilation outcome, diagnostics, and optionally compiler output such as FIR or IR. | Source and project-wide compiler configuration. The embedded host uses the compiler on the test runtime classpath; FIR/IR capture also needs the plugin’s capture options. |
 | `assertEditor` | What the IDE reports for source, such as reference resolution and diagnostics. | A configured editor host, the project dependencies and plugin, a compatible IDE and Knapshots adapter, and any IDE integration the plugin needs. For KEFS, that includes KEFS and a compatible IDE plugin artifact. |
 
 The distinction matters: a successful compiler assertion does not establish that the IDE can resolve the generated declaration, and an editor assertion does not test the resulting program's runtime behavior.
 
 ## Configuring compiler assertions today
 
-`knapshots-compiler` provides `EmbeddedCompilerHost` to run a real JVM compiler. Configure the compiler plugin JAR, any compilation classpath entries, and, when capturing output, the options that ask that plugin to write its captures. Pass that host and the matching embedded Kotlin compiler version to `assertCompiler`. The host accepts compiler arguments; the format of FIR and IR output and the options to produce it depend on the plugin being tested.
+Configure the compiler plugin once in Gradle. The artifact is the plugin JAR under test; the optional FIR and IR settings are the plugin-specific options that write those captures:
 
-Inline FIR/IR recording is available through `SnapshotRecording`; review the recorded source and rerun the test. Knapshots still requires explicit compiler-host setup at the assertion call site; shared defaults like KPaths' existing test harness are not yet integrated. The embedded host uses its bundled compiler version rather than downloading a compiler for each requested version.
+```kotlin
+knapshots {
+  compilerPlugin {
+    artifact.set(layout.projectDirectory.file("build/libs/example-compiler-plugin.jar"))
+    id.set("example.compiler-plugin")
+    firOption.set("firSnapshot")
+    irOption.set("irSnapshot")
+  }
+}
+```
+
+Knapshots uses the test task's runtime classpath and the loaded Kotlin compiler version. If the target Kotlin compiler Gradle plugin is already applied and exposes its compiler ID, the ID can be inferred. You can then check compilation without a host or version argument:
+
+```kotlin
+assertCompiler("class Example") {
+  succeeds()
+}
+```
+
+For FIR or IR, pass the desired expectations as `fir` and `ir`. Use `record = SnapshotRecording.MISSING` to record missing inline snapshots, then review the changes and rerun the test. An explicit `CompilerHost` remains available for integrations that need a different compiler invocation. The embedded host runs the compiler on the test runtime classpath; it does not download another compiler when a version is requested.
+
+This setup is experimental and requires the Knapshots Gradle plugin and compiler module. KPaths' opt-in cross-project fixture exercises successful compilation, diagnostics, FIR/IR snapshots, version-specific expectations, and inline recording against its real compiler plugin.
 
 ## Configuring editor assertions today
 

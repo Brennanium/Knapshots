@@ -9,6 +9,30 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 
 class EditorCompatibilityPluginTest {
+  @Test fun `test configuration is compatible with Gradle configuration cache`(@TempDir dir: Path) {
+    Files.writeString(dir.resolve("settings.gradle.kts"), "rootProject.name = \"consumer\"")
+    Files.writeString(dir.resolve("compiler.jar"), "test compiler artifact")
+    Files.writeString(dir.resolve("build.gradle.kts"), """
+      plugins { java; id("dev.knapshots.compatibility") }
+      knapshots {
+        compilerPlugin {
+          artifact.set(layout.projectDirectory.file("compiler.jar"))
+          id.set("example.compiler-plugin")
+          firOption.set("firSnapshot")
+        }
+      }
+      tasks.test { failOnNoDiscoveredTests = false }
+    """.trimIndent())
+    val testSource = dir.resolve("src/test/java/example/Example.java")
+    Files.createDirectories(testSource.parent)
+    Files.writeString(testSource, "package example; public class Example {}")
+    val runner = GradleRunner.create().withProjectDir(dir.toFile()).withPluginClasspath()
+      .withArguments("test", "--configuration-cache")
+    runner.build()
+    val second = runner.build()
+    assertContains(second.output, "Configuration cache entry reused")
+  }
+
   @Test fun `infers a sole declared plugin but avoids guessing among several`(@TempDir dir: Path) {
     Files.writeString(dir.resolve("settings.gradle.kts"), "rootProject.name = \"consumer\"")
     fun build(extra: String, assertion: String) {
@@ -42,6 +66,12 @@ class EditorCompatibilityPluginTest {
       tasks.named<Test>("test") { classpath = files(fixture) }
       knapshots {
         gradlePlugin { id.set("example.plugin") }
+        compilerPlugin {
+          id.set("example.compiler-plugin")
+          artifact.set(layout.projectDirectory.file("compiler.jar"))
+          firOption.set("firSnapshot")
+          irOption.set("irSnapshot")
+        }
         idePlugin { kefs { idePlugin.set("example:ide-plugin") } }
         dependencies.add("example:library:1")
       }
@@ -51,6 +81,11 @@ class EditorCompatibilityPluginTest {
           check(test.systemProperties["junit.jupiter.extensions.autodetection.enabled"] == "true")
           val args = test.jvmArgumentProviders.flatMap { it.asArguments() }
           check("-Dknapshots.editor.pluginId=example.plugin" in args)
+          check("-Dknapshots.compiler.pluginId=example.compiler-plugin" in args)
+          check(args.any { it.startsWith("-Dknapshots.compiler.pluginJar=") && it.endsWith("compiler.jar") })
+          check("-Dknapshots.compiler.firOption=firSnapshot" in args)
+          check("-Dknapshots.compiler.irOption=irSnapshot" in args)
+          check(args.any { it.startsWith("-Dknapshots.compiler.classpath=") && it.endsWith("runtime.jar") })
           check("-Dknapshots.editor.kefsCoordinate=example:ide-plugin" in args)
           check("-Dknapshots.editor.pluginVersion=3.4.5" in args)
           check("-Dknapshots.editor.kotlinVersion=2.4.21" in args)
