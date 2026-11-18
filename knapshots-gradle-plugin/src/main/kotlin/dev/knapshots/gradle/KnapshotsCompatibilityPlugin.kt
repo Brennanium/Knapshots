@@ -40,9 +40,14 @@ public abstract class CompatibilityExtension {
 
 public class KnapshotsCompatibilityPlugin : Plugin<Project> {
   override fun apply(project: Project) {
+    val editorProject = project.extensions.create("knapshotsEditor", EditorProjectExtension::class.java)
+    editorProject.runnerRoot.convention(project.layout.dir(project.providers.gradleProperty("knapshots.ideRunnerRoot").map(project::file)))
+    editorProject.idePath.convention(project.layout.dir(project.providers.gradleProperty("knapshots.idePath").map(project::file)))
+    editorProject.kefsVersion.convention(project.providers.gradleProperty("knapshots.kefsVersion"))
     // JUnit discovers the editor extension when its test dependency is present.
     project.tasks.withType(Test::class.java).configureEach { task ->
       task.systemProperty("junit.jupiter.extensions.autodetection.enabled", "true")
+      task.jvmArgumentProviders.add(EditorProjectArguments(editorProject))
     }
     val extension = project.extensions.create("knapshotsCompatibility", CompatibilityExtension::class.java)
     extension.ideCache.convention(project.layout.buildDirectory.dir("knapshots/ide-distributions"))

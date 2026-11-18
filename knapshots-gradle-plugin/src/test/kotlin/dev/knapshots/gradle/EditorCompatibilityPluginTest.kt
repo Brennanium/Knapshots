@@ -13,10 +13,17 @@ class EditorCompatibilityPluginTest {
     Files.writeString(dir.resolve("settings.gradle.kts"), "rootProject.name = \"consumer\"")
     Files.writeString(dir.resolve("build.gradle.kts"), """
       plugins { java; id("dev.knapshots.compatibility") }
+      knapshotsEditor {
+        pluginId.set("example.plugin")
+        dependencies.add("example:library:1")
+      }
       tasks.register("inspectTestConfiguration") {
         doLast {
-          val value = tasks.named<Test>("test").get().systemProperties["junit.jupiter.extensions.autodetection.enabled"]
-          check(value == "true")
+          val test = tasks.named<Test>("test").get()
+          check(test.systemProperties["junit.jupiter.extensions.autodetection.enabled"] == "true")
+          val args = test.jvmArgumentProviders.flatMap { it.asArguments() }
+          check("-Dknapshots.editor.pluginId=example.plugin" in args)
+          check("-Dknapshots.editor.dependencies=example:library:1" in args)
         }
       }
     """.trimIndent())

@@ -91,12 +91,28 @@ The failure paths are relative to the temporary inspection directory.
 
 ## Editor assertions in JUnit
 
-Add `knapshots-editor-junit` to the test dependencies and configure an `EditorHostProvider`
-service for the project. The compatibility plugin enables JUnit extension discovery, so tests can
-call `assertEditor(source) { ... }` without passing a host or adding an annotation to each test.
-Without the Gradle plugin, enable JUnit's `junit.jupiter.extensions.autodetection.enabled` setting.
-The host is created only when an editor assertion runs.
+Add `knapshots-editor-junit` and `knapshots-ide-runner` to the test dependencies. The compatibility
+plugin enables JUnit extension discovery; tests can then call `assertEditor(source) { ... }`
+without an annotation or host argument. Configure the temporary project's plugin and dependencies
+once in Gradle:
 
-The current KPaths consumer test demonstrates this integration, including its provider. The
-provider still assembles the IDE launcher and generated project configuration explicitly; a
-streamlined Gradle-backed provider for ordinary consumers remains to be implemented.
+```kotlin
+knapshotsEditor {
+  kotlinVersion.set("2.4.21")
+  pluginId.set("example.compiler")
+  pluginVersion.set("1.0.0")
+  dependencies.add("example:runtime:1.0.0")
+  repository.set(layout.projectDirectory.dir("build/local-maven"))
+  kefsCoordinate.set("example:compiler-plugin")
+  kefsRepository.set(layout.projectDirectory.dir("build/ide-maven"))
+}
+```
+
+The IDE orchestrator can provide `knapshots.idePath` and `knapshots.kefsVersion`. For the current
+experimental launcher, `knapshots.ideRunnerRoot` must point to a Knapshots checkout that contains
+its Gradle wrapper and IntelliJ adapter. This checkout requirement and manual plugin/dependency
+configuration are not yet the final consumer setup. The KPaths integration test uses the same
+provider; it currently passes its project configuration through Gradle test properties.
+
+The provider is initialized only when a test calls `assertEditor`. Without the compatibility
+plugin, enable JUnit's `junit.jupiter.extensions.autodetection.enabled` setting yourself.
