@@ -4,6 +4,7 @@ import dev.knapshots.testing.editor.EditorRequest
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 
 /** Gradle files and optional project files required to open a generated editor-test project. */
 public data class EditorProjectTemplate(
@@ -11,6 +12,8 @@ public data class EditorProjectTemplate(
   val buildGradleKts: String,
   val gradleProperties: String? = null,
   val additionalFiles: Map<String, String> = emptyMap(),
+  /** Existing regular files copied into every generated project, such as a Gradle wrapper. */
+  val copiedFiles: Map<String, Path> = emptyMap(),
 )
 
 /** Paths created for one editor inspection. The runner owns deletion after IDE shutdown. */
@@ -31,18 +34,32 @@ public class EditorProjectMaterializer {
     request: EditorRequest,
   ): MaterializedEditorProject {
     require(!Files.exists(directory)) { "Editor project directory already exists: $directory" }
-    val files = buildList {
+    val textFiles = buildList {
       add("settings.gradle.kts" to template.settingsGradleKts)
       add("build.gradle.kts" to template.buildGradleKts)
       template.gradleProperties?.let { add("gradle.properties" to it) }
       addAll(template.additionalFiles.entries.map { (path, contents) -> path to contents })
       addAll(request.sources.map { source -> "src/main/kotlin/${source.fileName}" to source.text })
     }
-    val destinations = files.map { (relativePath, _) -> resolve(directory, relativePath) }
+    val copiedFiles = template.copiedFiles.entries.map { (relativePath, source) ->
+      require(Files.isRegularFile(source)) { "Copied editor-project file must be a regular file: $source" }
+      relativePath to source
+    }
+    val destinations = (textFiles.map { it.first } + copiedFiles.map { it.first })
+      .map { relativePath -> resolve(directory, relativePath) }
     require(destinations.distinct().size == destinations.size) { "Generated editor-project files must not overlap." }
+    val reserved = setOf(
+      directory.resolve(".knapshots/editor-request.properties"),
+      directory.resolve(".knapshots/editor-response.properties"),
+    )
+    require(destinations.none(reserved::contains)) { "Generated editor-project files cannot replace Knapshots protocol files." }
 
     Files.createDirectories(directory)
-    files.zip(destinations).forEach { (file, destination) -> write(destination, file.second) }
+    textFiles.zip(destinations.take(textFiles.size)).forEach { (file, destination) -> write(destination, file.second) }
+    copiedFiles.zip(destinations.drop(textFiles.size)).forEach { (file, destination) ->
+      Files.createDirectories(checkNotNull(destination.parent))
+      Files.copy(file.second, destination, StandardCopyOption.COPY_ATTRIBUTES)
+    }
 
     val requestPath = directory.resolve(".knapshots/editor-request.properties")
     val responsePath = directory.resolve(".knapshots/editor-response.properties")

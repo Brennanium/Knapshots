@@ -46,4 +46,32 @@ class EditorProjectMaterializerTest {
       materializer.materialize(existing, template, EditorRequest(listOf(EditorSource("Example.kt", "class Example")), emptySet(), true))
     }
   }
+
+  @Test fun `copies validated external project files with their executable bit`(@TempDir directory: Path) {
+    val wrapper = directory.resolve("template/gradlew")
+    Files.createDirectories(wrapper.parent)
+    Files.writeString(wrapper, "#!/bin/sh\n")
+    assertTrue(wrapper.toFile().setExecutable(true))
+
+    val project = EditorProjectMaterializer().materialize(
+      directory.resolve("consumer"),
+      template.copy(copiedFiles = mapOf("gradlew" to wrapper)),
+      EditorRequest(listOf(EditorSource("Example.kt", "class Example")), emptySet(), true),
+    )
+
+    val staged = project.directory.resolve("gradlew")
+    assertEquals("#!/bin/sh\n", Files.readString(staged))
+    assertTrue(Files.isExecutable(staged))
+  }
+
+  @Test fun `rejects missing copied files before creating a project`(@TempDir directory: Path) {
+    assertFailsWith<IllegalArgumentException> {
+      EditorProjectMaterializer().materialize(
+        directory.resolve("consumer"),
+        template.copy(copiedFiles = mapOf("gradlew" to directory.resolve("missing"))),
+        EditorRequest(listOf(EditorSource("Example.kt", "class Example")), emptySet(), true),
+      )
+    }
+    assertTrue(!Files.exists(directory.resolve("consumer")))
+  }
 }

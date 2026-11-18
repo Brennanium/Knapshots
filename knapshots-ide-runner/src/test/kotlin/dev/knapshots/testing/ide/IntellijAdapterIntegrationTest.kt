@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Assumptions.assumeTrue
  */
 @Tag("ide-integration")
 class IntellijAdapterIntegrationTest {
-  @Test fun `adapter resolves a reference in an imported Kotlin project`() {
+  @Test fun `adapter captures resolution and diagnostics in an imported Kotlin project`() {
     val repository = Path.of(checkNotNull(System.getProperty("knapshots.projectDir")))
     val configuredIde = System.getProperty("knapshots.idePath")?.let(Path::of)
     assumeTrue(configuredIde != null, "Set -Pknapshots.idePath to run the IntelliJ adapter integration test.")
@@ -47,6 +47,12 @@ class IntellijAdapterIntegrationTest {
       """.trimIndent(),
       additionalFiles = mapOf(
         "local.properties" to "sdk.dir=${propertiesPath(checkNotNull(sdk).toRealPath())}\n",
+      ),
+      copiedFiles = mapOf(
+        "gradlew" to repository.resolve("gradlew"),
+        "gradlew.bat" to repository.resolve("gradlew.bat"),
+        "gradle/wrapper/gradle-wrapper.jar" to repository.resolve("gradle/wrapper/gradle-wrapper.jar"),
+        "gradle/wrapper/gradle-wrapper.properties" to repository.resolve("gradle/wrapper/gradle-wrapper.properties"),
       ),
     )
     val launcher = CommandEditorProcessLauncher(
@@ -85,11 +91,13 @@ class IntellijAdapterIntegrationTest {
         }
 
         val doubled = Values.number
+        val unknown = Values.missing
       """,
       host = host,
-      checkDiagnostics = false,
     ) {
+      diagnostics { error("Unresolved reference") }
       reference("Values.number").resolves()
+      reference("Values.missing").isUnresolved()
     }
   }
 

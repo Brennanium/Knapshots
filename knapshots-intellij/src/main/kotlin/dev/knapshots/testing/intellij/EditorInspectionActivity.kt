@@ -9,6 +9,7 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.startup.ProjectActivity
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.psi.PsiFile
@@ -87,10 +88,17 @@ public class EditorInspectionActivity : ProjectActivity {
 
     val deadline = System.currentTimeMillis() + READY_TIMEOUT_MILLIS
     var lastPending = "waiting for project import and indexing"
+    var lastHighlightRestart = 0L
     while (System.currentTimeMillis() < deadline && !project.isDisposed) {
       delay(POLL_INTERVAL_MILLIS)
       if (DumbService.isDumb(project)) {
         lastPending = "waiting for indexing"
+        continue
+      }
+      if (request.captureDiagnostics && System.currentTimeMillis() - lastHighlightRestart >= HIGHLIGHT_RESTART_INTERVAL_MILLIS) {
+        lastHighlightRestart = System.currentTimeMillis()
+        restartHighlighting(project, sourcePaths)
+        lastPending = "waiting for editor highlighting"
         continue
       }
       when (val attempt = inspectWhenReady(project, sourcePaths, request)) {
@@ -121,6 +129,9 @@ public class EditorInspectionActivity : ProjectActivity {
     val files = sourcePaths.map { path ->
       val virtualFile = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(path)
         ?: return@compute InspectionAttempt.Pending("waiting for source file $path")
+      if (!ProjectFileIndex.getInstance(project).isInSourceContent(virtualFile)) {
+        return@compute InspectionAttempt.Pending("waiting for Gradle source roots for ${virtualFile.name}")
+      }
       val psi = PsiManager.getInstance(project).findFile(virtualFile)
         ?: return@compute InspectionAttempt.Pending("waiting for PSI for ${virtualFile.name}")
       val document = FileDocumentManager.getInstance().getDocument(virtualFile)
@@ -194,6 +205,19 @@ public class EditorInspectionActivity : ProjectActivity {
   private fun setting(environment: String, property: String): String? =
     System.getenv(environment) ?: System.getProperty(property)
 
+  private fun restartHighlighting(project: Project, sourcePaths: List<Path>) {
+    ApplicationManager.getApplication().invokeLater {
+      if (project.isDisposed) return@invokeLater
+      sourcePaths.forEach { source ->
+        val file = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(source) ?: return@forEach
+        FileEditorManager.getInstance(project).openFile(file, true)
+        PsiManager.getInstance(project).findFile(file)?.let {
+          DaemonCodeAnalyzerEx.getInstanceEx(project).restart(it)
+        }
+      }
+    }
+  }
+
   private fun logIgnored(project: Project, reason: String) {
     logger.info("Ignoring project '${project.basePath}' for Knapshots inspection: $reason")
   }
@@ -221,6 +245,7 @@ public class EditorInspectionActivity : ProjectActivity {
   private companion object {
     val logger: Logger = Logger.getInstance(EditorInspectionActivity::class.java)
     const val POLL_INTERVAL_MILLIS: Long = 2_000
+    const val HIGHLIGHT_RESTART_INTERVAL_MILLIS: Long = 30_000
     const val READY_TIMEOUT_MILLIS: Long = 10 * 60 * 1_000
   }
 }

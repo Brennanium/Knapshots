@@ -127,8 +127,9 @@ before it can be called supported.
 
 There is an intentionally opt-in macOS Android Studio smoke test in `knapshots-ide-runner`. It
 materializes a plain Kotlin project, launches the adapter through `runIde`, and checks a resolved
-reference through `assertEditor`. It is tagged `ide-integration` and excluded from normal builds;
-this is the first real integration boundary, not yet a compatibility matrix.
+and unresolved reference plus a real Kotlin error diagnostic through `assertEditor`. It is tagged
+`ide-integration` and excluded from normal builds; this is the first real integration boundary,
+not yet a compatibility matrix.
 
 ## Test strategy
 
