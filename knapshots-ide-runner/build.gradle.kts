@@ -25,7 +25,7 @@ tasks.test {
     val properties = Properties().apply { kpaths.resolve("gradle.properties").inputStream().use(::load) }
     val version = checkNotNull(properties.getProperty("VERSION_NAME"))
     val config = mapOf(
-      "runnerRoot" to rootProject.projectDir.absolutePath,
+      "wrapperRoot" to providers.gradleProperty("knapshots.editor.wrapperRoot").orElse(rootProject.projectDir.absolutePath).get(),
       "idePath" to providers.gradleProperty("knapshots.idePath").get(),
       "kotlinVersion" to libs.versions.kotlin.get(),
       "pluginId" to "dev.kpaths.compiler",
@@ -47,6 +47,12 @@ tasks.test {
       listOf("-Dknapshots.editor.classpath=${editorDependencies.asPath}")
     })
     config.forEach { (key, value) -> systemProperty("knapshots.editor.$key", value) }
+    if (!providers.gradleProperty("knapshots.editor.adapterArchive").isPresent) {
+      systemProperty("knapshots.editor.runnerRoot", rootProject.projectDir.absolutePath)
+    }
+    listOf("adapterArchive", "kefsArchive", "wrapperRoot").forEach { name ->
+      providers.gradleProperty("knapshots.editor.$name").orNull?.let { systemProperty("knapshots.editor.$name", it) }
+    }
     providers.gradleProperty("knapshots.reportDirectory").orNull?.let { systemProperty("knapshots.editor.reportDirectory", it) }
   }
   providers.gradleProperty("knapshots.idePath").orNull?.let {

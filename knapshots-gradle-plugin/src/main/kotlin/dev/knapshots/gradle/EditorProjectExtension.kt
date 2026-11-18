@@ -1,6 +1,7 @@
 package dev.knapshots.gradle
 
 import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.file.FileCollection
 import org.gradle.api.tasks.Classpath
 import org.gradle.api.tasks.testing.Test
@@ -12,6 +13,9 @@ import org.gradle.process.CommandLineArgumentProvider
 /** Project-wide settings for materializing editor-test projects and launching the IDE adapter. */
 public abstract class EditorProjectExtension {
   public abstract val runnerRoot: DirectoryProperty
+  public abstract val wrapperRoot: DirectoryProperty
+  public abstract val adapterArchive: RegularFileProperty
+  public abstract val kefsArchive: RegularFileProperty
   public abstract val idePath: DirectoryProperty
   public abstract val repository: DirectoryProperty
   public abstract val kefsRepository: DirectoryProperty
@@ -33,6 +37,9 @@ internal class EditorProjectArguments(
   override fun asArguments(): Iterable<String> {
     val values = mapOf(
       "runnerRoot" to config.runnerRoot.orNull?.asFile?.absolutePath,
+      "wrapperRoot" to config.wrapperRoot.orNull?.asFile?.absolutePath,
+      "adapterArchive" to config.adapterArchive.orNull?.asFile?.absolutePath,
+      "kefsArchive" to config.kefsArchive.orNull?.asFile?.absolutePath,
       "idePath" to config.idePath.orNull?.asFile?.absolutePath,
       "repository" to config.repository.orNull?.asFile?.absolutePath,
       "kefsRepository" to config.kefsRepository.orNull?.asFile?.absolutePath,

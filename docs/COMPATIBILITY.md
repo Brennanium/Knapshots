@@ -112,10 +112,15 @@ separate consumer classpath or a plugin version unrelated to their project versi
 those values explicitly. The compiler plugin ID and KEFS coordinate cannot be reliably inferred
 from the runtime classpath.
 
-The IDE orchestrator can provide `knapshots.idePath` and `knapshots.kefsVersion`. For the current
-experimental launcher, `knapshots.ideRunnerRoot` must point to a Knapshots checkout that contains
-its Gradle wrapper and IntelliJ adapter. This checkout requirement and remaining plugin configuration are not yet the final consumer setup. The KPaths integration test uses the same
-provider; it currently passes its project configuration through Gradle test properties.
+The compatibility orchestrator supplies the selected IDE and, when KEFS is enabled, its downloaded
+archive to the editor driver. Configure `adapterArchive` with the Knapshots IntelliJ adapter ZIP;
+the direct launcher installs it and KEFS in an isolated IDE sandbox. The test project's Gradle
+wrapper is used by default. The direct launcher has passed a KPaths Android Studio test with the
+adapter and wrapper outside the Knapshots checkout.
+
+The adapter archive is not published yet, so selecting and resolving a compatible archive still
+requires setup. The previous Gradle-based launcher remains available through `knapshots.ideRunnerRoot`.
+KPaths' integration currently passes its project configuration through Gradle test properties.
 
 The provider is initialized only when a test calls `assertEditor`. Without the compatibility
 plugin, enable JUnit's `junit.jupiter.extensions.autodetection.enabled` setting yourself.

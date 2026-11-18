@@ -42,13 +42,18 @@ public abstract class CompatibilityExtension {
 public class KnapshotsCompatibilityPlugin : Plugin<Project> {
   override fun apply(project: Project) {
     val editorProject = project.extensions.create("knapshotsEditor", EditorProjectExtension::class.java)
+    editorProject.wrapperRoot.convention(project.rootProject.layout.projectDirectory)
     editorProject.pluginVersion.convention(project.provider { project.version.toString().takeUnless { it == "unspecified" } })
     editorProject.kotlinVersion.convention(project.provider {
       project.extensions.findByType(VersionCatalogsExtension::class.java)?.find("libs")?.orElse(null)
         ?.findVersion("kotlin")?.orElse(null)?.requiredVersion?.takeIf(String::isNotBlank)
     })
     editorProject.runnerRoot.convention(project.layout.dir(project.providers.gradleProperty("knapshots.ideRunnerRoot").map(project::file)))
-    editorProject.idePath.convention(project.layout.dir(project.providers.gradleProperty("knapshots.idePath").map(project::file)))
+    editorProject.idePath.convention(project.layout.dir(
+      project.providers.gradleProperty("knapshots.idePath").orElse(project.providers.environmentVariable("KNAPSHOTS_IDE_PATH")).map(project::file),
+    ))
+    editorProject.kefsArchive.convention(project.layout.file(project.providers.environmentVariable("KNAPSHOTS_KEFS_ARCHIVE").map(project::file)))
+    editorProject.adapterArchive.convention(project.layout.file(project.providers.environmentVariable("KNAPSHOTS_IDE_ADAPTER_ARCHIVE").map(project::file)))
     editorProject.kefsVersion.convention(project.providers.gradleProperty("knapshots.kefsVersion"))
     // JUnit discovers the editor extension when its test dependency is present.
     project.tasks.withType(Test::class.java).configureEach { task ->

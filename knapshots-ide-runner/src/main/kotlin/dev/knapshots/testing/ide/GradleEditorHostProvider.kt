@@ -18,7 +18,11 @@ public class GradleEditorHostProvider : EditorHostProvider {
     fun optional(name: String): String? = System.getProperty("knapshots.editor.$name")
     fun quote(value: String) = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$") + "\""
     fun xml(value: String) = value.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;").replace(">", "&gt;")
-    val runnerRoot = Path.of(required("runnerRoot")).toRealPath()
+    val adapterArchive = optional("adapterArchive")?.let { Path.of(it).toRealPath() }
+    val runnerRoot = optional("runnerRoot")?.let { Path.of(it).toRealPath() }
+    val wrapperRoot = optional("wrapperRoot")?.let { Path.of(it).toRealPath() }
+      ?: runnerRoot ?: Path.of(System.getProperty("user.dir")).toRealPath()
+    require(adapterArchive != null || runnerRoot != null) { "Configure the IDE adapter archive or launcher checkout." }
     val ide = Path.of(required("idePath")).toRealPath()
     val javaHome = listOf(ide.resolve("Contents/jbr/Contents/Home"), ide.resolve("jbr"))
       .firstOrNull { Files.isExecutable(it.resolve("bin/java")) } ?: error("Android Studio JBR missing: $ide")
@@ -64,11 +68,15 @@ public class GradleEditorHostProvider : EditorHostProvider {
         dependencies { ${dependencies.joinToString("; ") { "implementation(${quote(it)})" }}${if (dependencies.isNotEmpty() && classpathDeclaration.isNotEmpty()) "; " else ""}$classpathDeclaration }
       """.trimIndent(),
       additionalFiles = additional,
-      copiedFiles = wrapper.associateWith { runnerRoot.resolve(it) },
+      copiedFiles = wrapper.associateWith { wrapperRoot.resolve(it) },
     )
-    val launcher = CommandEditorProcessLauncher(
+    val launcher = if (adapterArchive != null) {
+      val archives = listOf(adapterArchive) + listOfNotNull(optional("kefsArchive")?.let { Path.of(it).toRealPath() })
+      require(kefs == null || archives.size == 2) { "Configure a KEFS archive for the direct IDE launcher." }
+      DirectIdeProcessLauncher(ide, archives)
+    } else CommandEditorProcessLauncher(
       command = { project -> listOf(
-        runnerRoot.resolve("gradlew").toString(), "--no-daemon", "--no-configuration-cache", "-p", runnerRoot.toString(),
+        checkNotNull(runnerRoot).resolve("gradlew").toString(), "--no-daemon", "--no-configuration-cache", "-p", runnerRoot.toString(),
         "-Pknapshots.enableIntellijAdapter", "-Pknapshots.idePath=$ide",
       ) + (kefs?.let { listOf("-Pknapshots.kefsVersion=$it") } ?: emptyList()) + listOf(
         "-Pknapshots.isolatedBuildRoot=${project.directory.parent.resolve("nested-build")}",
@@ -80,7 +88,10 @@ public class GradleEditorHostProvider : EditorHostProvider {
     return RunnerEditorSourceHost(template, launcher,
       temporaryParent = optional("temporaryParent")?.let { Files.createDirectories(Path.of(it)) },
       reportDirectory = optional("reportDirectory")?.let(Path::of),
-      failureReportFiles = listOf("nested-build/knapshots-intellij/editor-inspection-sandbox/log/idea.log"),
+      failureReportFiles = listOf(
+        "nested-build/knapshots-intellij/editor-inspection-sandbox/log/idea.log",
+        "ide-sandbox/log/idea.log",
+      ),
     )
   }
 }
