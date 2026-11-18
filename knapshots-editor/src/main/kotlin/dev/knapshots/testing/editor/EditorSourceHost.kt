@@ -88,3 +88,29 @@ public fun assertEditor(
     (observations as? EditorObservationSession)?.complete(successful)
   }
 }
+
+private val editorHostContext = ThreadLocal<EditorSourceHost>()
+
+/** Runs editor assertions with a shared host on the current thread; nested scopes are restored. */
+public fun <T> withEditorHost(host: EditorSourceHost, block: () -> T): T {
+  val previous = editorHostContext.get()
+  editorHostContext.set(host)
+  return try { block() } finally {
+    if (previous == null) editorHostContext.remove() else editorHostContext.set(previous)
+  }
+}
+
+/** Opens source using the host installed by [withEditorHost]. */
+public fun assertEditor(
+  source: String,
+  fileName: String = "Test.kt",
+  additionalSources: List<EditorSource> = emptyList(),
+  checkDiagnostics: Boolean = true,
+  awaitReferences: Set<String> = emptySet(),
+  block: EditorExpectations.() -> Unit,
+) {
+  val host = checkNotNull(editorHostContext.get()) {
+    "No editor host is configured; use withEditorHost or pass host to assertEditor."
+  }
+  assertEditor(source, host, fileName, additionalSources, checkDiagnostics, awaitReferences, block)
+}

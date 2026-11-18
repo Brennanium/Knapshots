@@ -5,6 +5,30 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class EditorSourceHostTest {
+  @Test fun `scoped hosts restore outer configuration after nested failure`() {
+    val calls = mutableListOf<String>()
+    fun host(name: String) = EditorSourceHost {
+      calls += name
+      object : EditorObservations {
+        override fun diagnostics() = emptyList<EditorDiagnostic>()
+        override fun reference(expression: String) = ReferenceObservation.Unresolved
+      }
+    }
+    assertFailsWith<IllegalStateException> { assertEditor("class Example") {} }
+    withEditorHost(host("outer")) {
+      assertEditor("class Example") {}
+      assertFailsWith<IllegalArgumentException> {
+        withEditorHost(host("inner")) {
+          assertEditor("class Example") {}
+          throw IllegalArgumentException("test")
+        }
+      }
+      assertEditor("class Example") {}
+    }
+    assertEquals(listOf("outer", "inner", "outer"), calls)
+    assertFailsWith<IllegalStateException> { assertEditor("class Example") {} }
+  }
+
   @Test fun `inline source is opened once and assertions use its observations`() {
     var opened: EditorRequest? = null
     val host = EditorSourceHost { request ->
