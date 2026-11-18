@@ -1,6 +1,9 @@
 package dev.knapshots.gradle
 
 import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.FileCollection
+import org.gradle.api.tasks.Classpath
+import org.gradle.api.tasks.testing.Test
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Internal
@@ -21,7 +24,12 @@ public abstract class EditorProjectExtension {
   public abstract val kefsEnabled: Property<Boolean>
 }
 
-internal class EditorProjectArguments(@get:Internal val config: EditorProjectExtension) : CommandLineArgumentProvider {
+internal class EditorProjectArguments(
+  @get:Internal val config: EditorProjectExtension,
+  @get:Internal val testTask: Test,
+) : CommandLineArgumentProvider {
+  @get:Classpath val testClasspath: FileCollection get() = testTask.classpath
+
   override fun asArguments(): Iterable<String> {
     val values = mapOf(
       "runnerRoot" to config.runnerRoot.orNull?.asFile?.absolutePath,
@@ -36,6 +44,7 @@ internal class EditorProjectArguments(@get:Internal val config: EditorProjectExt
       "kefsCoordinate" to config.kefsCoordinate.orNull,
       "kefsEnabled" to config.kefsEnabled.orNull?.toString(),
     )
-    return values.mapNotNull { (key, value) -> value?.let { "-Dknapshots.editor.$key=$it" } }
+    val classpath = testClasspath.files.filter { it.exists() }.joinToString(java.io.File.pathSeparator) { it.absolutePath }
+    return (values + ("classpath" to classpath.takeIf { it.isNotEmpty() })).mapNotNull { (key, value) -> value?.let { "-Dknapshots.editor.$key=$it" } }
   }
 }

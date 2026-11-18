@@ -11,8 +11,14 @@ import org.junit.jupiter.api.io.TempDir
 class EditorCompatibilityPluginTest {
   @Test fun `enables editor extension discovery for JUnit test tasks`(@TempDir dir: Path) {
     Files.writeString(dir.resolve("settings.gradle.kts"), "rootProject.name = \"consumer\"")
+    Files.writeString(dir.resolve("runtime.jar"), "placeholder")
+    Files.createDirectories(dir.resolve("gradle"))
+    Files.writeString(dir.resolve("gradle/libs.versions.toml"), "[versions]\nkotlin = \"2.4.21\"\n")
     Files.writeString(dir.resolve("build.gradle.kts"), """
       plugins { java; id("dev.knapshots.compatibility") }
+      version = "3.4.5"
+      val fixture = layout.projectDirectory.file("runtime.jar")
+      tasks.named<Test>("test") { classpath = files(fixture) }
       knapshotsEditor {
         pluginId.set("example.plugin")
         dependencies.add("example:library:1")
@@ -23,6 +29,9 @@ class EditorCompatibilityPluginTest {
           check(test.systemProperties["junit.jupiter.extensions.autodetection.enabled"] == "true")
           val args = test.jvmArgumentProviders.flatMap { it.asArguments() }
           check("-Dknapshots.editor.pluginId=example.plugin" in args)
+          check("-Dknapshots.editor.pluginVersion=3.4.5" in args)
+          check("-Dknapshots.editor.kotlinVersion=2.4.21" in args)
+          check(args.any { it.startsWith("-Dknapshots.editor.classpath=") && it.endsWith("runtime.jar") })
           check("-Dknapshots.editor.dependencies=example:library:1" in args)
         }
       }

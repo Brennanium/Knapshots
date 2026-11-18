@@ -23,11 +23,16 @@ public class GradleEditorHostProvider : EditorHostProvider {
     val javaHome = listOf(ide.resolve("Contents/jbr/Contents/Home"), ide.resolve("jbr"))
       .firstOrNull { Files.isExecutable(it.resolve("bin/java")) } ?: error("Android Studio JBR missing: $ide")
     val kotlin = required("kotlinVersion")
-    val pluginId = required("pluginId")
-    val pluginVersion = required("pluginVersion")
-    val repository = Path.of(required("repository")).toRealPath()
-    val dependencies = required("dependencies").split(';').filter(String::isNotBlank)
-    require(dependencies.isNotEmpty()) { "At least one editor project dependency is required." }
+    val pluginId = optional("pluginId")
+    val pluginVersion = optional("pluginVersion")
+    require(pluginId == null || pluginVersion != null) { "A plugin version is required when a plugin ID is supplied." }
+    val repository = optional("repository")?.let { Path.of(it).toRealPath() }
+    val dependencies = optional("dependencies")?.split(';')?.filter(String::isNotBlank).orEmpty()
+    val classpath = optional("classpath")?.split(java.io.File.pathSeparator)?.filter(String::isNotBlank).orEmpty()
+    val localRepository = repository?.let { "maven { url = uri(${quote(it.toString())}) }; " }.orEmpty()
+    val pluginDeclaration = pluginId?.let { "; id(${quote(it)}) version ${quote(checkNotNull(pluginVersion))}" }.orEmpty()
+    val classpathDeclaration = if (classpath.isEmpty()) "" else
+      "implementation(files(${classpath.joinToString(", ") { quote(it) }}))"
     val additional = mutableMapOf<String, String>()
     val sdk = sequenceOf(System.getenv("ANDROID_HOME"), System.getenv("ANDROID_SDK_ROOT"),
       System.getProperty("user.home") + "/Library/Android/sdk").filterNotNull().map(Path::of)
@@ -50,13 +55,13 @@ public class GradleEditorHostProvider : EditorHostProvider {
     val wrapper = listOf("gradlew", "gradlew.bat", "gradle/wrapper/gradle-wrapper.jar", "gradle/wrapper/gradle-wrapper.properties")
     val template = EditorProjectTemplate(
       settingsGradleKts = """
-        pluginManagement { repositories { maven { url = uri(${quote(repository.toString())}) }; gradlePluginPortal(); mavenCentral() } }
-        dependencyResolutionManagement { repositories { maven { url = uri(${quote(repository.toString())}) }; mavenCentral() } }
+        pluginManagement { repositories { ${localRepository}gradlePluginPortal(); mavenCentral() } }
+        dependencyResolutionManagement { repositories { ${localRepository}mavenCentral() } }
         rootProject.name = "knapshots-editor-consumer"
       """.trimIndent(),
       buildGradleKts = """
-        plugins { kotlin("jvm") version ${quote(kotlin)}; id(${quote(pluginId)}) version ${quote(pluginVersion)} }
-        dependencies { ${dependencies.joinToString("; ") { "implementation(${quote(it)})" }} }
+        plugins { kotlin("jvm") version ${quote(kotlin)}$pluginDeclaration }
+        dependencies { ${dependencies.joinToString("; ") { "implementation(${quote(it)})" }}${if (dependencies.isNotEmpty() && classpathDeclaration.isNotEmpty()) "; " else ""}$classpathDeclaration }
       """.trimIndent(),
       additionalFiles = additional,
       copiedFiles = wrapper.associateWith { runnerRoot.resolve(it) },

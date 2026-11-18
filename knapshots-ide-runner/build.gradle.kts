@@ -31,13 +31,21 @@ tasks.test {
       "pluginId" to "dev.kpaths.compiler",
       "pluginVersion" to version,
       "repository" to kpaths.resolve("build/consumer-verification/repository").absolutePath,
-      "dependencies" to "io.github.brennanium:kpaths-core:$version;io.github.brennanium:kpaths-annotations:$version",
       "kefsVersion" to providers.gradleProperty("knapshots.kefsVersion").get(),
       "kefsRepository" to kpaths.resolve("kpaths-kefs-ide-fixture/build/kefs-repository").absolutePath,
       "kefsCoordinate" to "io.github.brennanium:kpaths-compiler-plugin-jvm",
       "kefsEnabled" to (providers.gradleProperty("knapshots.kpathsMode").orElse("enabled").get() != "disabled").toString(),
       "temporaryParent" to rootProject.layout.buildDirectory.dir("ide-integration").get().asFile.absolutePath,
     )
+    // Model the consumer's ordinary test dependencies as the temporary project's classpath.
+    val editorDependencies = files(
+      kpaths.resolve("kpaths-core/build/libs/kpaths-core-jvm-$version.jar"),
+      kpaths.resolve("kpaths-annotations/build/libs/kpaths-annotations-jvm-$version.jar"),
+    )
+    classpath += editorDependencies
+    jvmArgumentProviders.add(CommandLineArgumentProvider {
+      listOf("-Dknapshots.editor.classpath=${editorDependencies.asPath}")
+    })
     config.forEach { (key, value) -> systemProperty("knapshots.editor.$key", value) }
     providers.gradleProperty("knapshots.reportDirectory").orNull?.let { systemProperty("knapshots.editor.reportDirectory", it) }
   }

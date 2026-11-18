@@ -98,20 +98,23 @@ once in Gradle:
 
 ```kotlin
 knapshotsEditor {
-  kotlinVersion.set("2.4.21")
   pluginId.set("example.compiler")
-  pluginVersion.set("1.0.0")
-  dependencies.add("example:runtime:1.0.0")
   repository.set(layout.projectDirectory.dir("build/local-maven"))
   kefsCoordinate.set("example:compiler-plugin")
   kefsRepository.set(layout.projectDirectory.dir("build/ide-maven"))
 }
 ```
 
+Knapshots uses the test task's runtime classpath as the generated project's dependencies. It takes
+the Kotlin version from the `libs` version catalog's `kotlin` entry and the plugin version from
+the Gradle project version when available; each can be overridden explicitly. Projects with a
+separate consumer classpath or a plugin version unrelated to their project version should configure
+those values explicitly. The compiler plugin ID and KEFS coordinate cannot be reliably inferred
+from the runtime classpath.
+
 The IDE orchestrator can provide `knapshots.idePath` and `knapshots.kefsVersion`. For the current
 experimental launcher, `knapshots.ideRunnerRoot` must point to a Knapshots checkout that contains
-its Gradle wrapper and IntelliJ adapter. This checkout requirement and manual plugin/dependency
-configuration are not yet the final consumer setup. The KPaths integration test uses the same
+its Gradle wrapper and IntelliJ adapter. This checkout requirement and remaining plugin configuration are not yet the final consumer setup. The KPaths integration test uses the same
 provider; it currently passes its project configuration through Gradle test properties.
 
 The provider is initialized only when a test calls `assertEditor`. Without the compatibility

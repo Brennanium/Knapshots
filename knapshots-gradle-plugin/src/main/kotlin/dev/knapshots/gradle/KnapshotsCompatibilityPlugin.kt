@@ -18,6 +18,7 @@ import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.testing.Test
+import org.gradle.api.artifacts.VersionCatalogsExtension
 import org.gradle.api.tasks.options.Option
 import org.gradle.work.DisableCachingByDefault
 import java.nio.file.Files
@@ -41,13 +42,18 @@ public abstract class CompatibilityExtension {
 public class KnapshotsCompatibilityPlugin : Plugin<Project> {
   override fun apply(project: Project) {
     val editorProject = project.extensions.create("knapshotsEditor", EditorProjectExtension::class.java)
+    editorProject.pluginVersion.convention(project.provider { project.version.toString().takeUnless { it == "unspecified" } })
+    editorProject.kotlinVersion.convention(project.provider {
+      project.extensions.findByType(VersionCatalogsExtension::class.java)?.find("libs")?.orElse(null)
+        ?.findVersion("kotlin")?.orElse(null)?.requiredVersion?.takeIf(String::isNotBlank)
+    })
     editorProject.runnerRoot.convention(project.layout.dir(project.providers.gradleProperty("knapshots.ideRunnerRoot").map(project::file)))
     editorProject.idePath.convention(project.layout.dir(project.providers.gradleProperty("knapshots.idePath").map(project::file)))
     editorProject.kefsVersion.convention(project.providers.gradleProperty("knapshots.kefsVersion"))
     // JUnit discovers the editor extension when its test dependency is present.
     project.tasks.withType(Test::class.java).configureEach { task ->
       task.systemProperty("junit.jupiter.extensions.autodetection.enabled", "true")
-      task.jvmArgumentProviders.add(EditorProjectArguments(editorProject))
+      task.jvmArgumentProviders.add(EditorProjectArguments(editorProject, task))
     }
     val extension = project.extensions.create("knapshotsCompatibility", CompatibilityExtension::class.java)
     extension.ideCache.convention(project.layout.buildDirectory.dir("knapshots/ide-distributions"))
