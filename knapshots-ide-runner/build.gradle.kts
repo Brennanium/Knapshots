@@ -19,4 +19,7 @@ tasks.test {
   providers.gradleProperty("knapshots.idePath").orNull?.let {
     systemProperty("knapshots.idePath", it)
   }
+  listOf("kpathsCheckout", "kefsVersion", "kpathsMode").forEach { name ->
+    providers.gradleProperty("knapshots.$name").orNull?.let { systemProperty("knapshots.$name", it) }
+  }
 }

@@ -11,6 +11,11 @@ on:
         description: KPaths branch or commit
         default: ci/ide-compatibility/knapshots-integration
         required: true
+      runner:
+        description: Select which operating systems to test
+        type: choice
+        options: [all, ubuntu, macos]
+        default: all
 
 permissions:
   contents: read
@@ -20,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-15]
+        os: ${{ fromJSON(inputs.runner == 'ubuntu' && '["ubuntu-latest"]' || inputs.runner == 'macos' && '["macos-15"]' || '["ubuntu-latest", "macos-15"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     steps:
@@ -52,6 +57,7 @@ jobs:
       - name: Run KPaths editor compatibility
         env:
           KPATHS_CHECKOUT: ${{ github.workspace }}/kpaths
+          KNAPSHOTS_CHECKOUT: ${{ github.workspace }}/knapshots
           IDE_VERSION: ${{ inputs.ide_version }}
         run: |
           export GRADLE_OPTS="-Dorg.gradle.java.installations.paths=$KPATHS_JDK25"
@@ -63,7 +69,13 @@ jobs:
           name: editor-compatibility-${{ matrix.os }}
           path: |
             knapshots/ci/kpaths-editor/build/reports/knapshots/
+            knapshots/build/ide-integration/**/.knapshots/ide-process.log
+            knapshots/build/ide-integration/**/.knapshots/editor-request.properties
+            knapshots/build/ide-integration/**/.knapshots/editor-response.properties
+            knapshots/build/ide-integration/**/nested-build/knapshots-intellij/editor-inspection-sandbox/log/
+            knapshots/knapshots-ide-runner/build/test-results/
             kpaths/kpaths-kefs-ide-fixture/build/consumer-probe*.log
             kpaths/kpaths-kefs-ide-fixture/build/consumer-probe*.txt
             kpaths/kpaths-kefs-ide-fixture/build/ide-probe/**/log/
           if-no-files-found: warn
+          include-hidden-files: true

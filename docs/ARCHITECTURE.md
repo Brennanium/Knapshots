@@ -86,11 +86,10 @@ This module describes assertions over a *prepared* editor:
 - `EditorSourceHost` allows an adapter to open inline source, while retaining ownership of IDE
   and project lifecycle.
 
-The module currently does not launch an IDE, import Gradle, wait for indexing, or record editor
-snapshots. It owns portable assertion semantics and the source/observation request boundary. A
-future runner can implement `EditorSourceHost` by materializing an `EditorRequest` in a temporary
-project and returning the real observations. It must not be a test fixture hard-coded to one
-compiler plugin.
+The module owns portable assertion semantics and the source/observation request boundary. Hosts
+may use explicit `awaitReferences` prerequisites when generated declarations become available
+asynchronously; those prerequisites are independent of assertions and are not implicit for
+unresolved-reference tests. IDE launch, Gradle import, and indexing live in the runner and adapter.
 
 ## Planned modules
 
@@ -125,11 +124,13 @@ ordinary `check` tasks. It has a deliberately opt-in launched-IDE smoke test, bu
 successful evidence across Android Studio/KEFS configurations and a Gradle-facing user setup
 before it can be called supported.
 
-There is an intentionally opt-in macOS Android Studio smoke test in `knapshots-ide-runner`. It
+There is an intentionally opt-in Android Studio smoke test in `knapshots-ide-runner`. It
 materializes a plain Kotlin project, launches the adapter through `runIde`, and checks a resolved
 and unresolved reference plus a real Kotlin error diagnostic through `assertEditor`. It is tagged
 `ide-integration` and excluded from normal builds; this is the first real integration boundary,
-not yet a compatibility matrix.
+not yet a compatibility matrix. A separate opt-in KPaths consumer test uses KEFS and the same
+Knapshots host for enabled, disabled, and intentional-diagnostic scenarios. KPaths currently
+prepares its local artifacts; the old imported-project assertion loop is not used by that test.
 
 ## Test strategy
 

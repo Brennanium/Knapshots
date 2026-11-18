@@ -41,6 +41,9 @@ dependencies {
   intellijPlatform {
     local(providers.gradleProperty("knapshots.idePath").map(::file))
     bundledPlugin("org.jetbrains.kotlin")
+    providers.gradleProperty("knapshots.kefsVersion").orNull?.let { version ->
+      plugin("com.github.mr3zee.kotlinPlugins:$version")
+    }
   }
 }
 
