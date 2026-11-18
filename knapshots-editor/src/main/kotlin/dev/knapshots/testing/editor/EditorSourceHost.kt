@@ -9,13 +9,14 @@ public data class EditorSource(
 /**
  * The complete request supplied to an editor host.
  *
- * It contains observations to collect, never expected outcomes. Expectations stay in the calling
- * test process, so an IDE adapter only reports what it actually observed.
+ * Assertions stay in the calling test process. Readiness references are optional explicit
+ * prerequisites for asynchronous plugin initialization; they are separate from assertions.
  */
 public data class EditorRequest(
   val sources: List<EditorSource>,
   val referenceExpressions: Set<String>,
   val captureDiagnostics: Boolean,
+  val readinessReferences: Set<String> = emptySet(),
 ) {
   init {
     require(sources.isNotEmpty()) { "At least one editor source is required." }
@@ -24,10 +25,15 @@ public data class EditorRequest(
       "Every editor source file must have a unique file name."
     }
     require(referenceExpressions.none { it.isBlank() }) { "A requested reference expression must not be blank." }
+    require(readinessReferences.none { it.isBlank() }) { "A readiness reference must not be blank." }
   }
 }
 
-/** Opens a prepared source request in an editor environment and returns actual observations. */
+/**
+ * Opens a prepared source request in an editor environment and returns actual observations.
+ * Hosts must wait for [EditorRequest.readinessReferences] to resolve or report a failure; they
+ * must not silently ignore those prerequisites.
+ */
 public fun interface EditorSourceHost {
   public fun open(request: EditorRequest): EditorObservations
 }
@@ -47,7 +53,9 @@ public interface EditorObservationSession : EditorObservations {
  *
  * The host owns IDE/project lifecycle and dependency setup. The assertion gathers requested
  * references before opening the host, allowing a remote IDE process to inspect exactly the
- * expressions that the caller asserted.
+ * expressions that the caller asserted. [awaitReferences] can identify positive readiness
+ * prerequisites for asynchronously loaded plugins; it is distinct from the assertions and
+ * should not be used for a reference whose intended result is unresolved.
  */
 public fun assertEditor(
   source: String,
@@ -55,6 +63,7 @@ public fun assertEditor(
   fileName: String = "Test.kt",
   additionalSources: List<EditorSource> = emptyList(),
   checkDiagnostics: Boolean = true,
+  awaitReferences: Set<String> = emptySet(),
   block: EditorExpectations.() -> Unit,
 ) {
   require(fileName.isNotBlank()) { "The source file name must not be blank." }
@@ -68,6 +77,7 @@ public fun assertEditor(
       sources = sources,
       referenceExpressions = expectations.requestedReferences(),
       captureDiagnostics = checkDiagnostics,
+      readinessReferences = awaitReferences,
     ),
   )
   var successful = false

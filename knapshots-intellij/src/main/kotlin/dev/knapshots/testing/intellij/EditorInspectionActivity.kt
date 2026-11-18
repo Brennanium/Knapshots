@@ -145,6 +145,8 @@ public class EditorInspectionActivity : ProjectActivity {
       if (incomplete != null) return@compute InspectionAttempt.Pending("waiting for highlighting for ${incomplete.psi.name}")
     }
 
+    val pendingReadiness = request.readinessReferences.firstOrNull { reference(files, it) !is ReferenceObservation.Resolved }
+    if (pendingReadiness != null) return@compute InspectionAttempt.Pending("waiting for readiness reference '$pendingReadiness'")
     val diagnostics = if (request.captureDiagnostics) files.flatMap { file -> diagnostics(project, file) } else null
     val references = request.referenceExpressions.associateWith { expression -> reference(files, expression) }
     InspectionAttempt.Completed(EditorInspectionResponse.Completed(diagnostics, references))
@@ -184,7 +186,9 @@ public class EditorInspectionActivity : ProjectActivity {
     val (file, start) = matches.single()
     val element = file.psi.findElementAt(start + expression.length - finalName.length)?.parent
       ?: return ReferenceObservation.Unavailable("Could not find a reference element for: $expression")
-    val target = element.references.firstNotNullOfOrNull { it.resolve() }
+    val references = element.references
+    if (references.isEmpty()) return ReferenceObservation.Unavailable("Element has no reference for: $expression")
+    val target = references.firstNotNullOfOrNull { it.resolve() }
     return if (target == null) ReferenceObservation.Unresolved else ReferenceObservation.Resolved(target.text)
   }
 

@@ -18,6 +18,7 @@ class EditorInspectionProtocolTest {
       sources = listOf(EditorSource("src/Example.kt", "val greeting = \"héllo=world\"")),
       referenceExpressions = linkedSetOf("greeting.length", "greeting"),
       captureDiagnostics = true,
+      readinessReferences = setOf("greeting.length"),
     )
     val path = directory.resolve("request.properties")
 
@@ -59,9 +60,17 @@ class EditorInspectionProtocolTest {
 
   @Test fun `malformed inputs are rejected rather than treated as empty observations`(@TempDir directory: Path) {
     val path = directory.resolve("broken.properties")
-    Files.writeString(path, "version=1\nkind=response\nstatus=completed\ndiagnosticsAvailable=false\ndiagnostics=1\nreferences=0\n")
+    Files.writeString(path, "version=${EditorInspectionProtocol.VERSION}\nkind=response\nstatus=completed\ndiagnosticsAvailable=false\ndiagnostics=1\nreferences=0\n")
 
     val failure = assertFailsWith<IllegalArgumentException> { EditorInspectionProtocol.readResponse(path) }
     assertEquals("An IDE response cannot include diagnostics when diagnostics are unavailable.", failure.message)
+  }
+
+  @Test fun `requests must include readiness fields`(@TempDir directory: Path) {
+    val path = directory.resolve("request.properties")
+    val request = EditorRequest(listOf(EditorSource("Example.kt", "class Example")), emptySet(), false)
+    EditorInspectionProtocol.writeRequest(request, path)
+    Files.writeString(path, Files.readString(path).lineSequence().filterNot { it.startsWith("readinessReferences=") }.joinToString("\n"))
+    assertFailsWith<IllegalArgumentException> { EditorInspectionProtocol.readRequest(path) }
   }
 }

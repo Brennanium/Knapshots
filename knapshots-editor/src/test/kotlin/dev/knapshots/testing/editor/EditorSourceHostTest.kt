@@ -88,4 +88,20 @@ class EditorSourceHostTest {
     assertEquals(setOf("missing.member"), opened?.referenceExpressions)
     assertEquals(false, opened?.captureDiagnostics)
   }
+
+  @Test fun `explicit readiness prerequisites are sent separately from assertions`() {
+    var opened: EditorRequest? = null
+    val host = EditorSourceHost { request ->
+      opened = request
+      object : EditorObservations {
+        override fun diagnostics() = emptyList<EditorDiagnostic>()
+        override fun reference(expression: String) = ReferenceObservation.Unresolved
+      }
+    }
+    assertEditor("val item = Example.generated", host, awaitReferences = setOf("Example.ready")) {
+      reference("Example.generated").isUnresolved()
+    }
+    assertEquals(setOf("Example.ready"), opened?.readinessReferences)
+    assertEquals(setOf("Example.generated"), opened?.referenceExpressions)
+  }
 }

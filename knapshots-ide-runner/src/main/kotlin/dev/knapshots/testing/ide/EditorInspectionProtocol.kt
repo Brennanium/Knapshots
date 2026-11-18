@@ -14,7 +14,7 @@ import java.util.Properties
 
 /** The versioned request/result transport used between an IDE runner and its IDE-side adapter. */
 public object EditorInspectionProtocol {
-  public const val VERSION: Int = 1
+  public const val VERSION: Int = 2
 
   /** Writes a complete editor inspection request without relying on a project-specific API. */
   public fun writeRequest(request: EditorRequest, path: Path) {
@@ -30,6 +30,10 @@ public object EditorInspectionProtocol {
       setProperty("references", request.referenceExpressions.size.toString())
       request.referenceExpressions.sorted().forEachIndexed { index, expression ->
         setEncoded("reference.$index.expression", expression)
+      }
+      setProperty("readinessReferences", request.readinessReferences.size.toString())
+      request.readinessReferences.sorted().forEachIndexed { index, expression ->
+        setEncoded("readiness.$index.expression", expression)
       }
     }
     write(properties, path)
@@ -48,10 +52,14 @@ public object EditorInspectionProtocol {
       properties.encoded("reference.$index.expression")
     }.toSet()
     require(references.size == properties.count("references")) { "Editor inspection request has duplicate references." }
+    val readinessCount = properties.count("readinessReferences")
+    val readiness = List(readinessCount) { index -> properties.encoded("readiness.$index.expression") }.toSet()
+    require(readiness.size == readinessCount) { "Editor inspection request has duplicate readiness references." }
     return EditorRequest(
       sources = sources,
       referenceExpressions = references,
       captureDiagnostics = properties.boolean("captureDiagnostics"),
+      readinessReferences = readiness,
     )
   }
 
