@@ -10,7 +10,7 @@ intentionally small and independently testable:
   in-memory `assertSnapshot` assertion.
 - `knapshots-compiler` provides source-driven `assertCompiler` assertions through a pluggable
   compiler host: success/failure, diagnostics, and version-aware named compiler-output snapshots.
-  A K2/KCTFork/Gradle backend is not bundled yet.
+  An experimental embedded JVM compiler host supports plugin-provided FIR/IR captures and inline recording.
 - `knapshots-editor` provides assertions over diagnostics and reference-resolution
   observations from an IDE host. It builds a complete source/observation request before opening
   that host, but does not yet start an IDE itself.

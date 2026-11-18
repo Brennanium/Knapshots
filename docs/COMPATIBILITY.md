@@ -56,7 +56,7 @@ Knapshots' imported-project smoke test has passed on Ubuntu/Xvfb and macOS CI us
 2026.2.2.8. A separate local integration uses Knapshots' editor host to test a KPaths consumer
 with KEFS enabled, disabled, and with an intentional Kotlin error; those scenarios have also
 passed on Ubuntu and macOS CI. KPaths still prepares its own artifacts for this test. Knapshots
-does not yet have a compiler backend or a fully independent KPaths integration. Selecting an IDE does not
+provides an embedded JVM compiler host; its KPaths integration is still experimental. Selecting an IDE does not
 itself make an adapter or compiler plugin compatible with its bundled compiler.
 
 Keep version selection, distribution resolution, platform launch, and project-specific assertions

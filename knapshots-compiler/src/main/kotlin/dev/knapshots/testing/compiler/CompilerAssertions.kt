@@ -226,3 +226,68 @@ public class CompilerDiagnosticExpectations internal constructor(
     expected += ExpectedCompilerDiagnostic(severity, messageContains, location)
   }
 }
+
+/** A source location to update when recording inline compiler snapshots. */
+public data class InlineSnapshotLocation(val file: java.nio.file.Path, val line: Int)
+
+/**
+ * Compiles a successful snippet and compares or records FIR and IR output. Recording requires
+ * a discoverable test source or an explicit source location; edits during compilation are detected.
+ */
+public fun assertCompiler(
+  source: String,
+  compilerVersion: String,
+  compiler: CompilerHost,
+  fir: SnapshotExpectation? = null,
+  ir: SnapshotExpectation? = null,
+  record: SnapshotRecording = SnapshotRecording.NONE,
+  recordVersion: Boolean = false,
+  location: InlineSnapshotLocation? = null,
+) {
+  val expected = buildMap {
+    fir?.let { put(CompilerSnapshotKind.FIR, it) }
+    ir?.let { put(CompilerSnapshotKind.IR, it) }
+    if (isEmpty()) {
+      put(CompilerSnapshotKind.FIR, snapshot())
+      put(CompilerSnapshotKind.IR, snapshot())
+    }
+  }
+  val recordingLocation = if (record != SnapshotRecording.NONE) location ?: discoverInlineSnapshotLocation() else null
+  val original = recordingLocation?.let { java.nio.file.Files.readString(it.file) }
+  val result = compiler.compile(CompilerRequest(listOf(CompilerSource("Main.kt", source.trimIndent())), compilerVersion, expected.keys))
+  check(result.succeeded && result.diagnostics.none { it.severity == CompilerDiagnosticSeverity.ERROR }) {
+    "Cannot record or compare snapshots: compilation failed. ${result.diagnostics}"
+  }
+  val captures = expected.keys.associateWith { kind ->
+    result.captures[kind] ?: error("The compiler did not provide the requested ${kind.name} snapshot.")
+  }
+  val updates = expected.filter { (kind, expectation) ->
+    shouldRecordSnapshot(expectation, captures.getValue(kind), compilerVersion, record, recordVersion)
+  }
+  if (updates.isNotEmpty()) {
+    val target = checkNotNull(recordingLocation)
+    try {
+      InlineCompilerSnapshots.write(target.file, target.line, captures.filterKeys { it in updates }, compilerVersion,
+        recordVersion, original, compiledSourceLine = true)
+    } catch (error: Exception) {
+      throw AssertionError("Could not record inline snapshots at ${target.file}:${target.line}: ${error.message}", error)
+    }
+    throw AssertionError("Recorded inline snapshots at ${target.file}:${target.line}; review and rerun the test.")
+  }
+  expected.forEach { (kind, expectation) ->
+    check(!expectation.missing) { "Missing ${kind.name} snapshot; enable recording to insert it." }
+  }
+  assertCompilerSnapshots(source, compilerVersion, expected) { _, _, _ -> captures }
+}
+
+private fun discoverInlineSnapshotLocation(): InlineSnapshotLocation {
+  val root = java.nio.file.Path.of(System.getProperty("user.dir")).toAbsolutePath()
+  val roots = listOf(root.resolve("src/test/kotlin"), root.resolve("src/test/java"))
+  val caller = Throwable().stackTrace.firstNotNullOfOrNull { frame ->
+    if (frame.lineNumber <= 0 || frame.fileName == null || frame.className.startsWith("dev.knapshots.testing.compiler.CompilerAssertions")) return@firstNotNullOfOrNull null
+    val packagePath = frame.className.substringBeforeLast('.', "").replace('.', '/')
+    roots.map { it.resolve(packagePath).resolve(frame.fileName) }
+      .firstOrNull(java.nio.file.Files::isRegularFile)?.let { InlineSnapshotLocation(it, frame.lineNumber) }
+  }
+  return requireNotNull(caller) { "Cannot locate the test source for inline recording; provide location explicitly." }
+}
