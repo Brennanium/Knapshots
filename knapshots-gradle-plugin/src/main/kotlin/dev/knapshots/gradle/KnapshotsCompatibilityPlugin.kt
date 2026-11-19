@@ -12,6 +12,7 @@ import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.ListProperty
+import org.gradle.api.provider.MapProperty
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.Internal
@@ -41,6 +42,8 @@ public abstract class CompatibilityExtension {
   public abstract val useXvfb: Property<Boolean>
   /** JUnit XML produced by the editor test invocation to collect for each scenario. */
   public abstract val scenarioJUnitXml: RegularFileProperty
+  /** Additional environment variables passed to compatibility drivers. */
+  public abstract val driverEnvironment: MapProperty<String, String>
 }
 
 public class KnapshotsCompatibilityPlugin : Plugin<Project> {
@@ -85,16 +88,19 @@ public class KnapshotsCompatibilityPlugin : Plugin<Project> {
     extension.ideCache.convention(project.layout.buildDirectory.dir("knapshots/ide-distributions"))
     extension.useKefs.convention(false)
     extension.useXvfb.convention(false)
+    extension.driverEnvironment.convention(emptyMap())
     project.tasks.register("compilerCompatibility", CompilerCompatibilityTask::class.java) { task ->
       task.group = "verification"
       task.description = "Run compiler compatibility checks for selected Kotlin versions."
       task.driver.set(extension.compilerDriver)
+      task.driverEnvironment.set(extension.driverEnvironment)
       task.reportFile.set(project.layout.buildDirectory.file("reports/knapshots/compiler-compatibility.json"))
     }
     project.tasks.register("editorCompatibility", EditorCompatibilityTask::class.java) { task ->
       task.group = "verification"
       task.description = "Run editor compatibility checks for an Android Studio release."
       task.driver.set(extension.editorDriver)
+      task.driverEnvironment.set(extension.driverEnvironment)
       task.idePath.set(extension.idePath)
       task.releaseFeed.set(extension.releaseFeed)
       task.ideCache.set(extension.ideCache)
@@ -124,6 +130,7 @@ public abstract class CompilerCompatibilityTask : DefaultTask() {
   public abstract val driver: RegularFileProperty
 
   @get:Input public abstract val platforms: ListProperty<String>
+  @get:Input public abstract val driverEnvironment: MapProperty<String, String>
   @get:OutputFile public abstract val reportFile: RegularFileProperty
 
   @Option(option = "platform", description = "Comma-separated target platforms, passed to the regression driver")
@@ -147,7 +154,9 @@ public abstract class CompilerCompatibilityTask : DefaultTask() {
     val report = CompilerCompatibility(driver = CompilerCompatibilityDriver { version ->
       val args = mutableListOf(executable.absolutePath, "--kotlin-version", version)
       platforms.getOrElse(emptyList()).takeIf { it.isNotEmpty() }?.let { args.addAll(listOf("--platform", it.joinToString(","))) }
-      val process = ProcessBuilder(args).directory(executable.parentFile).redirectErrorStream(true).start()
+      val builder = ProcessBuilder(args).directory(executable.parentFile).redirectErrorStream(true)
+      builder.environment().putAll(driverEnvironment.get())
+      val process = builder.start()
       val checks = linkedMapOf<String, CompatibilityStatus>()
       val marker = Regex("^KNAPSHOTS_CHECK ([A-Za-z0-9_-]+) (passed|failed|not-run)$")
       process.inputStream.bufferedReader().useLines { lines -> lines.forEach { line ->

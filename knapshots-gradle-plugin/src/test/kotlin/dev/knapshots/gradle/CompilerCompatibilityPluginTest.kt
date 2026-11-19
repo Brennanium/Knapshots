@@ -30,13 +30,17 @@ class CompilerCompatibilityPluginTest {
   @Test fun `passes platform selection and records individual check results`(@TempDir dir: Path) {
     Files.writeString(dir.resolve("settings.gradle.kts"), "rootProject.name = \"consumer\"")
     val driver = dir.resolve("driver.sh")
-    Files.writeString(driver, "#!/bin/sh\nprintf '%s\\n' \"\$*\" > args.txt\necho 'KNAPSHOTS_CHECK jvm passed'\necho 'KNAPSHOTS_CHECK native not-run'\n")
+    Files.writeString(driver, "#!/bin/sh\nprintf '%s\\n' \"\$*\" > args.txt\nprintf '%s\\n' \"\$KPATHS_TEST_CHECKOUT\" > env.txt\necho 'KNAPSHOTS_CHECK jvm passed'\necho 'KNAPSHOTS_CHECK native not-run'\n")
     check(driver.toFile().setExecutable(true))
     Files.writeString(dir.resolve("build.gradle.kts"), """
       plugins { id("dev.knapshots.compatibility") }
-      knapshotsCompatibility { compilerDriver.set(layout.projectDirectory.file("driver.sh")) }
+      knapshotsCompatibility {
+        compilerDriver.set(layout.projectDirectory.file("driver.sh"))
+        driverEnvironment.put("KPATHS_TEST_CHECKOUT", "/custom checkout")
+      }
     """.trimIndent())
     runner(dir).withArguments("compilerCompatibility", "--kotlin-version", "2.4.21", "--platform", "jvm,native").build()
+    assertEquals("/custom checkout", Files.readString(dir.resolve("env.txt")).trim())
     assertContains(Files.readString(dir.resolve("args.txt")), "--kotlin-version 2.4.21 --platform jvm,native")
     val report = Files.readString(dir.resolve("build/reports/knapshots/compiler-compatibility.json"))
     assertContains(report, "\"jvm\": \"passed\"")

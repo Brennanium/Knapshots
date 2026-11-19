@@ -30,6 +30,7 @@ knapshotsCompatibility {
   editorDriver.set(layout.projectDirectory.file("scripts/editor-driver"))
   useKefs.set(true) // optional; for a KEFS-based compiler plugin
   useXvfb.set(true) // optional; for Linux runners with xvfb-run installed
+  driverEnvironment.put("EXAMPLE_CHECKOUT", "/path/to/checkout") // optional
 }
 ```
 

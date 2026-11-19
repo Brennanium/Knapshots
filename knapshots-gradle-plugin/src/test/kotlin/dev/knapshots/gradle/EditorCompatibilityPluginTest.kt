@@ -114,7 +114,7 @@ class EditorCompatibilityPluginTest {
       <download><link>https://example.test/a-mac_arm.dmg</link><checksum>${"a".repeat(64)}</checksum></download></item></releases>"""
     Files.writeString(dir.resolve("releases.xml"), feed)
     val driver = dir.resolve("editor-driver.sh")
-    Files.writeString(driver, "#!/bin/sh\nprintf '%s\\n' \"\$2\" >> ide.txt\nprintf '%s\\n' \"\$KNAPSHOTS_IDE_PATH\" > ide-env.txt\necho editor-driver-ran\n")
+    Files.writeString(driver, "#!/bin/sh\nprintf '%s\\n' \"\$2\" >> ide.txt\nprintf '%s\\n' \"\$KNAPSHOTS_IDE_PATH\" > ide-env.txt\nprintf '%s\\n' \"\$KPATHS_TEST_CHECKOUT\" > checkout-env.txt\necho editor-driver-ran\n")
     check(driver.toFile().setExecutable(true))
     Files.writeString(dir.resolve("build.gradle.kts"), """
       plugins { id("dev.knapshots.compatibility") }
@@ -122,6 +122,7 @@ class EditorCompatibilityPluginTest {
         editorDriver.set(layout.projectDirectory.file("editor-driver.sh"))
         releaseFeed.set(layout.projectDirectory.file("releases.xml"))
         idePath.set(layout.projectDirectory.dir("studio"))
+        driverEnvironment.put("KPATHS_TEST_CHECKOUT", "/custom checkout")
       }
     """.trimIndent())
     val result = GradleRunner.create().withProjectDir(dir.toFile()).withPluginClasspath()
@@ -135,6 +136,7 @@ class EditorCompatibilityPluginTest {
     assertEquals(2, calls.size)
     assertEquals(ide.toRealPath(), Path.of(calls.first()).toRealPath())
     assertEquals(ide.toRealPath(), Path.of(Files.readString(dir.resolve("ide-env.txt")).trim()).toRealPath())
+    assertEquals("/custom checkout", Files.readString(dir.resolve("checkout-env.txt")).trim())
     assertContains(Files.readString(dir.resolve("build/reports/knapshots/editor-compatibility.json")), "\"result\": \"passed\"")
   }
 

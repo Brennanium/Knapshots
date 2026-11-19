@@ -16,6 +16,7 @@ import org.gradle.api.GradleException
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
+import org.gradle.api.provider.MapProperty
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputDirectory
 import org.gradle.api.tasks.InputFile
@@ -36,6 +37,7 @@ public abstract class EditorCompatibilityTask : DefaultTask() {
   @get:InputFile @get:Optional public abstract val releaseFeed: RegularFileProperty
   @get:Internal public abstract val ideCache: DirectoryProperty
   @get:Input public abstract val useKefs: Property<Boolean>
+  @get:Input public abstract val driverEnvironment: MapProperty<String, String>
   @get:Input @get:Optional public abstract val kefsVersion: Property<String>
   @get:Input public abstract val useXvfb: Property<Boolean>
   @get:OutputFile public abstract val reportFile: RegularFileProperty
@@ -110,6 +112,7 @@ public abstract class EditorCompatibilityTask : DefaultTask() {
           args.addAll(0, listOf("xvfb-run", "-a"))
         }
         val processBuilder = ProcessBuilder(args).directory(executable.parentFile).redirectErrorStream(true)
+        processBuilder.environment().putAll(driverEnvironment.get())
         processBuilder.environment()["KNAPSHOTS_IDE_PATH"] = ide.toAbsolutePath().toString()
         archive?.let { processBuilder.environment()["KNAPSHOTS_KEFS_ARCHIVE"] = it.toAbsolutePath().toString() }
         val process = processBuilder.start()
