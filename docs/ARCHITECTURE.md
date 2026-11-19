@@ -170,10 +170,7 @@ safety constraints, not its KPaths-specific API assumptions.
 
 ## Provenance and remaining KPaths work
 
-The initial code was copied from KPaths instead of moved. KPaths remains self-contained and its
-local test fixtures remain authoritative until Knapshots reaches a stable, independently verified
-release. This repository must not change KPaths’ dependencies or delete those local pieces during
-the extraction.
+The initial code was copied from KPaths. KPaths now consumes Knapshots through a composite build, with a pinned checkout in CI. Its compiler, KSP, and editor tests use Knapshots hosts and assertions; KPaths retains project-specific fixtures and downstream integration tests. The real IDE scenarios have passed on Ubuntu and macOS CI. Knapshots remains experimental and is not yet distributed as a stable release.
 
 The useful KPaths references are:
 
