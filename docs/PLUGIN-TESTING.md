@@ -59,3 +59,16 @@ With the JUnit integration and a project-configured host, a test can call `asser
 The [compatibility guide](COMPATIBILITY.md#editor-assertions-in-junit) describes the experimental Gradle settings and what is currently inferred. The adapter has not been published; a local archive or the existing checkout-based launcher is still needed. Other IDE plugin mechanisms require their own integration; enabling KEFS is not a requirement for compiler assertions.
 
 For runtime or bytecode checks, `EmbeddedCompilerHost.compile` returns class files alongside diagnostics. Call `result.classLoader()` to load a compiled class or inspect its `.class` resource after the temporary compiler directory has been removed.
+
+## Inspecting JVM bytecode
+
+Add `knapshots-bytecode` to inspect the classes produced by a compiler host. `ClassBytecode.read(bytes)` exposes methods, method calls, field accesses, type instructions, and referenced owners for focused structural checks. `renderJvmBytecode(bytes)` and `jvmBytecodeSnapshotting` provide a textual class-file snapshot without line numbers or stack frames.
+
+```kotlin
+val bytes = result.classFiles.getValue("example/Person.class")
+val person = ClassBytecode.read(bytes)
+val getter = person.method("getName", "()Ljava/lang/String;")
+assertSnapshot(bytes, expected = expectedBytecode, using = jvmBytecodeSnapshotting)
+```
+
+For version-aware compiler assertions, wrap a host with `withJvmBytecodeSnapshot("example.Person")`, then request `snapshot(JVM_BYTECODE, expected)` in the `assertCompiler` block alongside `fir(...)` and `ir(...)`. The standalone bytecode strategy and named compiler capture do not yet participate in inline compiler snapshot recording. Bytecode is compiler-version-specific, so choose expectations appropriate for the compiler under test.

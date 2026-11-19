@@ -19,6 +19,7 @@ rootProject.name = "Knapshots"
 include(
   ":knapshots-snapshots",
   ":knapshots-compiler",
+  ":knapshots-bytecode",
   ":knapshots-ksp",
   ":knapshots-editor",
   ":knapshots-editor-junit",

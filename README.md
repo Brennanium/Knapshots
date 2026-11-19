@@ -4,22 +4,16 @@ Knapshots is a Kotlin testing toolkit for snapshot assertions, compiler-plugin v
 
 See [Testing compiler plugins](docs/PLUGIN-TESTING.md) for the roles of Gradle, compiler, and IDE plugins and what each assertion needs.
 
-This repository is in its first extraction pass from KPaths. The initial modules are intentionally small and independently testable:
+The toolkit is under active development. Its modules include:
 
-- `knapshots-snapshots` provides composable capture and comparison strategies, including an
-  in-memory `assertSnapshot` assertion.
-- `knapshots-compiler` provides source-driven `assertCompiler` assertions through a pluggable
-  compiler host: success/failure, diagnostics, and version-aware named compiler-output snapshots.
-  An experimental embedded JVM compiler host supports plugin-provided FIR/IR captures and inline recording.
-- `knapshots-ksp` tests KSP processors, including generated-source snapshots and compilation diagnostics. See [Testing KSP processors](docs/KSP-TESTING.md).
-- `knapshots-editor` provides assertions over diagnostics and reference-resolution
-  observations from an IDE host. It builds a complete source/observation request before opening
-  that host, but does not yet start an IDE itself.
-- `knapshots-ide-runner` materializes fresh Gradle projects and carries versioned requests/results
-  between a runner and an IDE-side adapter. It can launch an IDE in an isolated sandbox, including
-  with a packaged adapter, and collect inspection logs.
+- `knapshots-snapshots` supplies reusable snapshot strategies and comparisons.
+- `knapshots-compiler` provides `assertCompiler`, compiler diagnostics, FIR and IR snapshots, and inline recording.
+- `knapshots-bytecode` inspects JVM instructions and captures class-file text snapshots.
+- `knapshots-ksp` tests KSP processors and generated sources.
+- `knapshots-editor` and `knapshots-editor-junit` provide source-driven editor assertions.
+- `knapshots-ide-runner`, `knapshots-intellij`, `knapshots-compatibility`, and `knapshots-gradle-plugin` host IDE inspections and coordinate compatibility tests.
 
-The planned `assertCompiler` and `assertEditor` source-driven integrations, Gradle plugin, and compatibility runner are not public APIs yet. This is deliberately a fresh repository: KPaths continues to use its local copies until this library has a complete, verified release.
+KPaths consumes Knapshots through a pinned source checkout in CI and a composite Gradle build locally. The APIs and packaging remain experimental; a published release and independently resolved IDE adapter are still to come.
 
 The experimental `knapshots-intellij` adapter is intentionally opt-in because it compiles against the exact APIs of a locally selected IntelliJ-based IDE. It is excluded from normal verification; see the architecture roadmap before enabling it.
 
@@ -33,7 +27,7 @@ To compile it against a selected IDE, provide its installation path explicitly:
   :knapshots-intellij:build
 ```
 
-This command only compiles the adapter. The experimental runner can package and launch it for imported-project assertions; a polished Gradle-facing setup for library consumers is still pending.
+This command only compiles the adapter. The experimental runner can package and launch it for imported-project assertions; see the [compatibility guide](docs/COMPATIBILITY.md) for the experimental Gradle setup.
 
 The repository includes one deliberately opt-in imported-project smoke test for the adapter. It uses a disposable IDE sandbox, pre-trusts only its generated project, and pre-seeds Android Studio's first-run/analytics preferences so CI never needs to answer a trust or consent dialog:
 
