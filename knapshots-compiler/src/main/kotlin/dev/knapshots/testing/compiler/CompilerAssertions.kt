@@ -317,10 +317,15 @@ public fun discoverInlineSnapshotLocation(): InlineSnapshotLocation {
         .toList()
     }
   } else emptyList()
+  return discoverInlineSnapshotLocation(roots)
+}
+
+/** Locate a recording call using explicit source roots, such as a subproject's test sources. */
+public fun discoverInlineSnapshotLocation(sourceRoots: List<java.nio.file.Path>): InlineSnapshotLocation {
   val caller = Throwable().stackTrace.firstNotNullOfOrNull { frame ->
     if (frame.lineNumber <= 0 || frame.fileName == null || frame.className.startsWith("dev.knapshots.testing.compiler.CompilerAssertions")) return@firstNotNullOfOrNull null
     val packagePath = frame.className.substringBeforeLast('.', "").replace('.', '/')
-    roots.map { it.resolve(packagePath).resolve(frame.fileName) }
+    sourceRoots.map { it.resolve(packagePath).resolve(frame.fileName) }
       .firstOrNull(java.nio.file.Files::isRegularFile)?.let { InlineSnapshotLocation(it, frame.lineNumber) }
   }
   return requireNotNull(caller) { "Cannot locate the test source for inline recording; provide location explicitly." }

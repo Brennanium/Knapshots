@@ -45,4 +45,12 @@ class InlineCompilerIntegrationTest {
     kotlin.test.assertContains(java.nio.file.Files.readString(file), "CLASS fixture/A")
     assertCompiler("class A", "2.4.21", host, bytecode = SnapshotExpectation("CLASS fixture/A"))
   }
+  @org.junit.jupiter.api.Test fun `discovers recording calls in an explicit source root`(@org.junit.jupiter.api.io.TempDir directory: java.nio.file.Path) {
+    val source = directory.resolve("dev/knapshots/testing/compiler/InlineCompilerIntegrationTest.kt")
+    java.nio.file.Files.createDirectories(source.parent)
+    java.nio.file.Files.writeString(source, "// source fixture")
+    val location = discoverInlineSnapshotLocation(listOf(directory))
+    kotlin.test.assertEquals(source, location.file)
+    kotlin.test.assertTrue(location.line > 0)
+  }
 }
