@@ -13,6 +13,7 @@ The toolkit is under active development. Its modules include:
 - `knapshots-ksp` tests KSP processors and generated sources.
 - `knapshots-editor` and `knapshots-editor-junit` provide source-driven editor assertions.
 - `knapshots-ide-runner`, `knapshots-intellij`, `knapshots-compatibility`, and `knapshots-gradle-plugin` host IDE inspections and coordinate compatibility tests.
+- `knapshots-intellij-fixture` is an optional standalone build for `assertEditor` in IntelliJ light fixtures; it requires a selected local IDE and IntelliJ test framework.
 
 KPaths consumes Knapshots through a pinned source checkout in CI and a composite Gradle build locally. The APIs and packaging remain experimental; a published release and independently resolved IDE adapter are still to come.
 
