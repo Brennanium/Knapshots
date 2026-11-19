@@ -71,4 +71,17 @@ val getter = person.method("getName", "()Ljava/lang/String;")
 assertSnapshot(bytes, expected = expectedBytecode, using = jvmBytecodeSnapshotting)
 ```
 
-For version-aware compiler assertions, wrap a host with `withJvmBytecodeSnapshot("example.Person")`, then request `snapshot(JVM_BYTECODE, expected)` in the `assertCompiler` block alongside `fir(...)` and `ir(...)`. The standalone bytecode strategy and named compiler capture do not yet participate in inline compiler snapshot recording. Bytecode is compiler-version-specific, so choose expectations appropriate for the compiler under test.
+For version-aware compiler assertions, wrap a host with `withJvmBytecodeSnapshot("example.Person")`, then request `bytecode(expected)` in the `assertCompiler` block alongside `fir(...)` and `ir(...)`. For inline recording, pass the wrapped host to `assertCompiler` and provide `bytecode = snapshot()`; recording follows the same modes and version selection as FIR and IR. The bytecode host must identify the class to capture:
+
+```kotlin
+val compiler = EmbeddedCompilerHost().withJvmBytecodeSnapshot("example.Person")
+assertCompiler(
+  source = "package example\nclass Person(val name: String)",
+  compilerVersion = kotlinVersion,
+  compiler = compiler,
+  bytecode = snapshot(),
+  record = SnapshotRecording.ALL,
+)
+```
+
+If a project supplies a `CompilerHostProvider`, it can wrap that host once for its tests. A host that does not provide bytecode captures cannot satisfy the bytecode expectation. Bytecode is compiler-version-specific, so choose expectations appropriate for the compiler under test.

@@ -10,6 +10,7 @@ public data class CompilerSnapshotKind(val name: String) {
   companion object {
     val FIR = CompilerSnapshotKind("FIR")
     val IR = CompilerSnapshotKind("IR")
+    val BYTECODE = CompilerSnapshotKind("BYTECODE")
   }
 }
 

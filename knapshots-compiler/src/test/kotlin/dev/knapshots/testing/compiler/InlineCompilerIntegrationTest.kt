@@ -31,4 +31,18 @@ class InlineCompilerIntegrationTest {
     }
     kotlin.test.assertEquals(original, Files.readString(file))
   }
+  @org.junit.jupiter.api.Test fun `records and compares bytecode snapshots`(@org.junit.jupiter.api.io.TempDir directory: java.nio.file.Path) {
+    val file = directory.resolve("BytecodeTest.kt")
+    java.nio.file.Files.writeString(file, "fun test() {\n  assertCompiler(source = \"class A\", bytecode = snapshot())\n}\n")
+    val host = CompilerHost { request ->
+      kotlin.test.assertEquals(setOf(CompilerSnapshotKind.BYTECODE), request.captures)
+      CompilerResult(true, captures = mapOf(CompilerSnapshotKind.BYTECODE to "CLASS fixture/A"))
+    }
+    kotlin.test.assertFailsWith<AssertionError> {
+      assertCompiler("class A", "2.4.21", host, record = SnapshotRecording.ALL,
+        location = InlineSnapshotLocation(file, 2), bytecode = snapshot())
+    }
+    kotlin.test.assertContains(java.nio.file.Files.readString(file), "CLASS fixture/A")
+    assertCompiler("class A", "2.4.21", host, bytecode = SnapshotExpectation("CLASS fixture/A"))
+  }
 }

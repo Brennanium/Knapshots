@@ -150,6 +150,16 @@ public class CompilerExpectations internal constructor() {
     ir(SnapshotExpectation(expected))
   }
 
+  /** Convenience for a JVM bytecode capture supplied by the compiler host. */
+  public fun bytecode(expected: SnapshotExpectation) {
+    snapshot(CompilerSnapshotKind.BYTECODE, expected)
+  }
+
+  /** Convenience for an exact, version-independent JVM bytecode capture. */
+  public fun bytecode(expected: String) {
+    bytecode(SnapshotExpectation(expected))
+  }
+
   internal fun snapshotKinds(): Set<CompilerSnapshotKind> = expectedSnapshots.keys
 
   internal fun verify(result: CompilerResult, compilerVersion: String) {
@@ -246,7 +256,7 @@ public class CompilerDiagnosticExpectations internal constructor(
 public data class InlineSnapshotLocation(val file: java.nio.file.Path, val line: Int)
 
 /**
- * Compiles a successful snippet and compares or records FIR and IR output. Recording requires
+ * Compiles a successful snippet and compares or records compiler output. Recording requires
  * a discoverable test source or an explicit source location; edits during compilation are detected.
  */
 public fun assertCompiler(
@@ -258,10 +268,12 @@ public fun assertCompiler(
   record: SnapshotRecording = SnapshotRecording.NONE,
   recordVersion: Boolean = false,
   location: InlineSnapshotLocation? = null,
+  bytecode: SnapshotExpectation? = null,
 ) {
   val expected = buildMap {
     fir?.let { put(CompilerSnapshotKind.FIR, it) }
     ir?.let { put(CompilerSnapshotKind.IR, it) }
+    bytecode?.let { put(CompilerSnapshotKind.BYTECODE, it) }
     if (isEmpty()) {
       put(CompilerSnapshotKind.FIR, snapshot())
       put(CompilerSnapshotKind.IR, snapshot())

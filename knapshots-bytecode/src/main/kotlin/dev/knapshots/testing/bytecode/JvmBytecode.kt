@@ -75,7 +75,7 @@ public fun renderJvmBytecode(bytes: ByteArray): String {
 public val jvmBytecodeSnapshotting: Snapshotting<ByteArray, String> = textSnapshotting.pullback(::renderJvmBytecode)
 
 /** Default capture name for a JVM class-file snapshot. */
-public val JVM_BYTECODE: CompilerSnapshotKind = CompilerSnapshotKind("BYTECODE")
+public val JVM_BYTECODE: CompilerSnapshotKind = CompilerSnapshotKind.BYTECODE
 
 /** Capture a class file as a named compiler snapshot, alongside FIR and IR captures. */
 public fun CompilerHost.withJvmBytecodeSnapshot(

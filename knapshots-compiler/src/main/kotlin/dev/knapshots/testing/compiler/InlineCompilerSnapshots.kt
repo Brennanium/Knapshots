@@ -40,7 +40,7 @@ internal object InlineCompilerSnapshots {
     expectedSource: String? = null,
     compiledSourceLine: Boolean = false,
     assertionName: String = "assertCompiler",
-    argumentNames: Map<CompilerSnapshotKind, String> = mapOf(CompilerSnapshotKind.FIR to "fir", CompilerSnapshotKind.IR to "ir"),
+    argumentNames: Map<CompilerSnapshotKind, String> = mapOf(CompilerSnapshotKind.FIR to "fir", CompilerSnapshotKind.IR to "ir", CompilerSnapshotKind.BYTECODE to "bytecode"),
   ) = synchronized(lock) {
     require(values.isNotEmpty())
     val original = Files.readString(file)

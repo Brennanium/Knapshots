@@ -38,7 +38,7 @@ class JvmBytecodeTest {
     assertCompiler("class Example", "2.4.21", host) {
       succeeds()
       fir("fir")
-      snapshot(kind, renderJvmBytecode(bytes))
+      bytecode(renderJvmBytecode(bytes))
     }
   }
 
