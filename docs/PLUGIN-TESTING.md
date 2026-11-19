@@ -85,3 +85,9 @@ assertCompiler(
 ```
 
 If a project supplies a `CompilerHostProvider`, it can wrap that host once for its tests. A host that does not provide bytecode captures cannot satisfy the bytecode expectation. Bytecode is compiler-version-specific, so choose expectations appropriate for the compiler under test.
+
+## Choosing a compiler host
+
+`EmbeddedCompilerHost` calls the compiler in the test process. It is a good default for frequent compiler-plugin assertions and uses the Kotlin compiler on the test runtime classpath. `GradleCompilerHost`, from `knapshots-compiler-gradle`, creates a disposable Kotlin/JVM project and resolves the Kotlin Gradle plugin for the requested version. It is useful for checking compiler options and dependencies through a real Gradle build, at the cost of project configuration and build time.
+
+Both implement `CompilerHost`, so either can drive `assertCompiler`. Configure a Gradle host with the test classpath, compiler arguments, and, for FIR/IR captures, a function that maps the requested captures to plugin arguments. It returns compiled classes and any requested capture files. A compilation failure currently reports the Gradle build output as one error diagnostic; it does not yet parse individual Kotlin diagnostic locations. Tests that require custom multi-module projects or need to inspect a project after the build should continue to create those projects explicitly.

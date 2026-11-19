@@ -8,6 +8,7 @@ The toolkit is under active development. Its modules include:
 
 - `knapshots-snapshots` supplies reusable snapshot strategies and comparisons.
 - `knapshots-compiler` provides `assertCompiler`, compiler diagnostics, FIR and IR snapshots, and inline recording.
+- `knapshots-compiler-gradle` compiles snippets in temporary Gradle projects with a selected Kotlin version.
 - `knapshots-bytecode` inspects JVM instructions and captures class-file text snapshots.
 - `knapshots-ksp` tests KSP processors and generated sources.
 - `knapshots-editor` and `knapshots-editor-junit` provide source-driven editor assertions.
