@@ -17,6 +17,12 @@ class EditorProjectMaterializerTest {
     additionalFiles = mapOf("gradle/libs.versions.toml" to "[versions]"),
   )
 
+  @Test fun `generated Gradle settings select the launcher JDK before sync`() {
+    val settings = editorGradleSettings()
+    assertTrue(settings.contains("value=\"#JAVA_HOME\""))
+    assertTrue(settings.contains("value=\"${'$'}PROJECT_DIR${'$'}\""))
+  }
+
   @Test fun `creates an isolated Gradle project and writes its protocol request`(@TempDir directory: Path) {
     val request = EditorRequest(
       sources = listOf(EditorSource("example/Example.kt", "class Example")),

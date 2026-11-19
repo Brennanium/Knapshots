@@ -21,8 +21,11 @@ class DirectIdeProcessLauncherTest {
 
   @Test fun `launches with isolated plugin installation and project settings`(@TempDir directory: Path) {
     val ide = Files.createDirectories(directory.resolve("studio/bin"))
+    val java = Files.createDirectories(ide.parent.resolve("jbr/bin")).resolve("java")
+    Files.writeString(java, "#!/bin/sh\n")
+    check(java.toFile().setExecutable(true))
     val executable = ide.resolve("studio")
-    Files.writeString(executable, "#!/bin/sh\ntest -f \"$" + "STUDIO_VM_OPTIONS\"\n")
+    Files.writeString(executable, "#!/bin/sh\ntest -f \"$" + "STUDIO_VM_OPTIONS\" && test -x \"$" + "JAVA_HOME/bin/java\"\n")
     check(executable.toFile().setExecutable(true))
     val archive = directory.resolve("adapter.zip").also { archive(it, "adapter/lib/adapter.jar") }
     val project = Files.createDirectories(directory.resolve("inspection/project"))

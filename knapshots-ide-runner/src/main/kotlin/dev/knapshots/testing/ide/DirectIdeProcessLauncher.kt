@@ -63,7 +63,10 @@ public class DirectIdeProcessLauncher(
     return CommandEditorProcessLauncher(
       command = { listOf(executable.toString(), project.directory.toString()) },
       timeout = timeout,
-      environment = mapOf("STUDIO_VM_OPTIONS" to vmOptions.toString()),
+      environment = mapOf(
+        "STUDIO_VM_OPTIONS" to vmOptions.toString(),
+        "JAVA_HOME" to ideJavaHome(idePath).toString(),
+      ),
     ).launch(project)
   }
 }
@@ -82,3 +85,9 @@ internal fun trustedProjectPaths(project: Path): Set<Path> {
   }
   return result
 }
+
+/** Use the same JDK for Gradle sync as the one bundled with the selected IDE. */
+internal fun ideJavaHome(idePath: Path): Path =
+  listOf(idePath.resolve("Contents/jbr/Contents/Home"), idePath.resolve("jbr"))
+    .firstOrNull { Files.isExecutable(it.resolve("bin/java")) }
+    ?: error("Android Studio JBR missing: $idePath")

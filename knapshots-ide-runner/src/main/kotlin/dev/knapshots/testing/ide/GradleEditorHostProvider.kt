@@ -24,8 +24,7 @@ public class GradleEditorHostProvider : EditorHostProvider {
       ?: runnerRoot ?: Path.of(System.getProperty("user.dir")).toRealPath()
     require(adapterArchive != null || runnerRoot != null) { "Configure the IDE adapter archive or launcher checkout." }
     val ide = Path.of(required("idePath")).toRealPath()
-    val javaHome = listOf(ide.resolve("Contents/jbr/Contents/Home"), ide.resolve("jbr"))
-      .firstOrNull { Files.isExecutable(it.resolve("bin/java")) } ?: error("Android Studio JBR missing: $ide")
+    val javaHome = ideJavaHome(ide)
     val kotlin = required("kotlinVersion")
     val pluginId = optional("pluginId")
     val pluginVersion = optional("pluginVersion")
@@ -37,7 +36,7 @@ public class GradleEditorHostProvider : EditorHostProvider {
     val pluginDeclaration = pluginId?.let { "; id(${quote(it)}) version ${quote(checkNotNull(pluginVersion))}" }.orEmpty()
     val classpathDeclaration = if (classpath.isEmpty()) "" else
       "implementation(files(${classpath.joinToString(", ") { quote(it) }}))"
-    val additional = mutableMapOf<String, String>()
+    val additional = mutableMapOf(".idea/gradle.xml" to editorGradleSettings())
     val sdk = sequenceOf(System.getenv("ANDROID_HOME"), System.getenv("ANDROID_SDK_ROOT"),
       System.getProperty("user.home") + "/Library/Android/sdk").filterNotNull().map(Path::of)
       .firstOrNull(Files::isDirectory)
@@ -95,3 +94,17 @@ public class GradleEditorHostProvider : EditorHostProvider {
     )
   }
 }
+
+/** Link the generated project and select the launcher's JDK before the first Gradle sync. */
+internal fun editorGradleSettings(): String = """
+  <project version="4">
+    <component name="GradleSettings">
+      <option name="linkedExternalProjectsSettings">
+        <GradleProjectSettings>
+          <option name="externalProjectPath" value="${'$'}PROJECT_DIR${'$'}" />
+          <option name="gradleJvm" value="#JAVA_HOME" />
+        </GradleProjectSettings>
+      </option>
+    </component>
+  </project>
+""".trimIndent()
