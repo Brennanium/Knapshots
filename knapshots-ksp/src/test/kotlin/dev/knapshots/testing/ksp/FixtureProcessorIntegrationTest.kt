@@ -39,6 +39,22 @@ class FixtureProcessorIntegrationTest {
     assertKsp(source, version, host, generated = SnapshotExpectation(generated), mainClass = "fixture.MainKt")
   }
 
+  @Test fun `records source annotated processor diagnostics`(@TempDir directory: Path) {
+    val input = "package fixture\n@Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION) annotation class AddGreeting\n@AddGreeting fun invalid() = Unit"
+    val file = directory.resolve("Test.kt")
+    Files.writeString(file, "fun test() {\n  assertKsp(source = \"example\", diagnosticSnapshot = snapshot())\n}\n")
+    assertFailsWith<AssertionError> {
+      assertKsp(input, version, host, succeeds = false, diagnosticSnapshot = snapshot(), record = SnapshotRecording.MISSING,
+        location = InlineSnapshotLocation(file, 2))
+    }
+    val text = Files.readString(file)
+    assertContains(text, "@AddGreeting fun invalid() = Unit")
+    assertContains(text, "error: @AddGreeting requires a class")
+    assertKsp(input, version, host, succeeds = false, diagnosticSnapshot = SnapshotExpectation(
+      "package fixture\n@Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION) annotation class AddGreeting\n@AddGreeting fun invalid() = Unit\nerror: @AddGreeting requires a class",
+    ))
+  }
+
   @Test fun `processor errors fail compilation with an observable diagnostic`() {
     assertKsp("""
       package fixture

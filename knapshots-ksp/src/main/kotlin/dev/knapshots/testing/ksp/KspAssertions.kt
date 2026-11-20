@@ -1,5 +1,9 @@
 package dev.knapshots.testing.ksp
 
+import dev.knapshots.testing.compiler.CompilerDiagnostic
+import dev.knapshots.testing.compiler.CompilerDiagnosticSeverity
+import dev.knapshots.testing.compiler.CompilerSource
+import dev.knapshots.testing.compiler.renderCompilerDiagnostics
 import dev.knapshots.testing.compiler.InlineSnapshotLocation
 import dev.knapshots.testing.compiler.SnapshotExpectation
 import dev.knapshots.testing.compiler.SnapshotRecording
@@ -38,11 +42,12 @@ public fun assertKsp(
   record: SnapshotRecording = configuredRecording(),
   recordVersion: Boolean = System.getProperty("knapshots.ksp.recordVersion", "false").toBooleanStrict(),
   location: InlineSnapshotLocation? = null,
+  diagnosticSnapshot: SnapshotExpectation? = null,
 ) {
   require(compilerVersion.isNotBlank()) { "A compiler version is required." }
   val sources = listOf(KspSource(fileName, source)) + additionalSources
   require(sources.map { it.fileName }.distinct().size == sources.size) { "Source file names must be unique." }
-  val target = if (generated != null && record != SnapshotRecording.NONE) location ?: discoverInlineSnapshotLocation() else null
+  val target = if ((generated != null || diagnosticSnapshot != null) && record != SnapshotRecording.NONE) location ?: discoverInlineSnapshotLocation() else null
   val original = target?.let { Files.readString(it.file) }
   val result = host.process(KspRequest(sources.map { it.copy(text = it.text.trimIndent()) }, compilerVersion,
     dependencies.map { dependency -> dependency.copy(sources = dependency.sources.map { it.copy(text = it.text.trimIndent()) }) }, mainClass, processorProjects.map { processor -> processor.copy(sources = processor.sources.map { it.copy(text = it.text.trimIndent()) }) }))
@@ -74,22 +79,41 @@ public fun assertKsp(
     val unexpected = result.diagnostics.filterIndexed { index, diagnostic -> owner[index] == -1 && diagnostic.severity == KspDiagnosticSeverity.ERROR }
     if (unexpected.isNotEmpty()) throw AssertionError("Unexpected error diagnostics: $unexpected\n${result.output}")
   }
-  if (generated == null) return
   val actual = result.generatedFiles.toSortedMap().entries.joinToString("\n\n") { (name, text) ->
     "// FILE: $name\n${text.trimEnd('\n', '\r')}"
   }
-  if (shouldRecordSnapshot(generated, actual, compilerVersion, record, recordVersion)) {
+  val renderedDiagnostics = diagnosticSnapshot?.let {
+    renderCompilerDiagnostics(sources.map { source -> CompilerSource(source.fileName, source.text.trimIndent()) },
+      result.diagnostics.map { item ->
+        CompilerDiagnostic(when (item.severity) {
+          KspDiagnosticSeverity.ERROR -> CompilerDiagnosticSeverity.ERROR
+          KspDiagnosticSeverity.WARNING -> CompilerDiagnosticSeverity.WARNING
+          KspDiagnosticSeverity.INFO -> CompilerDiagnosticSeverity.INFO
+        }, item.message, item.file?.let { file ->
+          val normalized = file.replace('\\', '/').removePrefix("src/main/kotlin/")
+          item.line?.let { line -> "$normalized:$line" } ?: normalized
+        }, item.column)
+      })
+  }
+  val updates = mutableMapOf<String, String>()
+  if (generated != null && shouldRecordSnapshot(generated, actual, compilerVersion, record, recordVersion)) updates["generated"] = actual
+  if (diagnosticSnapshot != null && shouldRecordSnapshot(diagnosticSnapshot, checkNotNull(renderedDiagnostics), compilerVersion, record, recordVersion)) updates["diagnosticSnapshot"] = renderedDiagnostics
+  if (updates.isNotEmpty()) {
     val destination = checkNotNull(target)
     try {
-      recordInlineSnapshots(destination, "assertKsp", mapOf("generated" to actual), compilerVersion, recordVersion, original)
+      recordInlineSnapshots(destination, "assertKsp", updates, compilerVersion, recordVersion, original)
     } catch (error: Exception) {
       throw AssertionError("Could not record inline snapshot at ${destination.file}:${destination.line}: ${error.message}", error)
     }
     throw AssertionError("Recorded inline snapshot at ${destination.file}:${destination.line}; review and rerun the test.")
   }
-  check(!generated.missing) { "Missing generated source snapshot; enable recording to insert it." }
-  val difference = compareSnapshot(actual, generated.forVersion(compilerVersion).trimIndent().trimEnd('\n', '\r'), textSnapshotting)
-  if (difference != null) throw AssertionError("Generated KSP source for Kotlin $compilerVersion differs.\nExpected:\n${difference.expected}\nActual:\n${difference.actual}")
+  fun compare(name: String, expectation: SnapshotExpectation, output: String) {
+    check(!expectation.missing) { "Missing $name snapshot; enable recording to insert it." }
+    val difference = compareSnapshot(output.trimEnd('\n', '\r'), expectation.forVersion(compilerVersion).trimIndent().trimEnd('\n', '\r'), textSnapshotting)
+    if (difference != null) throw AssertionError("$name for Kotlin $compilerVersion differs.\nExpected:\n${difference.expected}\nActual:\n${difference.actual}")
+  }
+  if (generated != null) compare("Generated KSP source", generated, actual)
+  if (diagnosticSnapshot != null) compare("KSP diagnostic snapshot", diagnosticSnapshot, checkNotNull(renderedDiagnostics))
 }
 
 /** Provides a processor host for all assertions in a test runtime. */

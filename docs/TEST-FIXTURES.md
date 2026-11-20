@@ -11,9 +11,9 @@ The fixture is exercised by both embedded and Gradle compiler hosts. Tests check
 [CompilationTesting's beta preview](https://www.pointfree.co/blog/posts/234-beta-preview-compilationtesting) also motivates testing source-level compiler guarantees and recording diagnostics. The fixture and assertion APIs do not yet cover every behavior from MacroTesting or CompilationTesting. In particular, future work includes:
 
 - More declaration shapes and visibility cases beyond the generated functions and properties, nested and generic classes, and downstream JVM consumer already covered.
-- Diagnostic columns and full source ranges. Plugin-produced errors and warnings are tested with line locations; a disabled acceptance test documents the missing column.
+- Full diagnostic source ranges. The embedded compiler host captures line and column and renders a caret; range and end-position support needs further investigation.
 - Generated KSP resources. A disabled acceptance test demonstrates that the processor can produce a resource, but the Gradle host currently collects only Kotlin and Java sources.
-- Inline diagnostic snapshots, notes, and fix-it representations where Kotlin's compiler or IDE APIs expose them. Kotlin compiler diagnostics and IDE quick fixes are different APIs, so Swift fix-it behavior should not be assumed to map directly.
+- Editor diagnostic recording, notes, and fix-it representations where Kotlin's compiler or IDE APIs expose them. Kotlin compiler diagnostics and IDE quick fixes are different APIs, so Swift fix-it behavior should not be assumed to map directly.
 - Additional source formatting and escaped-string recording cases, language-mode options, and scenarios where a test should unexpectedly succeed or fail.
 - Further Kotlin-specific boundaries such as compiler-plugin ordering, bytecode bridges, and full imported-project IDE resolution. KSP multi-round and multiple-processor cases and lightweight IDE resolution are covered; they do not replace full IDE integration.
 

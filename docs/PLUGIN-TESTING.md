@@ -48,6 +48,24 @@ assertCompiler("class Example") {
 
 For FIR or IR, pass the desired expectations as `fir` and `ir`. Use `record = SnapshotRecording.MISSING` to record missing inline snapshots, then review the changes and rerun the test. To set a default for a test project, use `knapshots { recording.set("missing") }` or `-Pknapshots.recording=missing`; an explicit assertion argument overrides it. `recordCompilerVersion.set(true)` or `-Pknapshots.recordCompilerVersion=true` records version-specific overrides. The default is `none` when no recording mode is configured. An explicit `CompilerHost` remains available for integrations that need a different compiler invocation. The embedded host runs the compiler on the test runtime classpath; it does not download another compiler when a version is requested.
 
+### Recording compiler diagnostics
+
+Use `diagnostics = snapshot()` to record diagnostics against the input source. This works when compilation succeeds or fails, and an empty snapshot means no diagnostics were emitted:
+
+```kotlin
+assertCompiler(
+  source = "val count: Int = \"hello\"",
+  diagnostics = snapshot(),
+  record = SnapshotRecording.MISSING,
+)
+```
+
+Review the recorded expectation and rerun. The embedded compiler reports a line and column when available; Knapshots renders a caret at that position, without guessing a source range. When multiple files are supplied with `additionalSources`, snapshots label the files. A diagnostic without a usable source location is listed separately. Recorded diagnostic text is compiler-version-dependent; version-specific snapshot expectations work the same way as for FIR and IR.
+
+For KSP processor tests, `assertKsp(..., diagnosticSnapshot = snapshot())` records the same source-oriented format. Set `succeeds = false` when the processor is expected to fail. Source locations depend on what the processor and host report.
+
+For a focused assertion, use `diagnostics { error("message", line = 3) }` in the assertion block. `line` refers to the first source; `location` remains available for a named file. The Gradle compiler host currently exposes build failures as a single diagnostic rather than individual source positions.
+
 A host can use `temporaryCompilerHost` to receive a fresh temporary working directory for each compilation; Knapshots removes it when the host finishes. A caller-supplied directory is a possible future override for inspecting output or preparing project files. Its ownership, existing-file behavior, and cleanup rules are not defined yet.
 
 This setup is experimental and requires the Knapshots Gradle plugin and compiler module. Knapshots' own tests use a small [internal compiler plugin](TEST-FIXTURES.md) to exercise diagnostics, FIR/IR phase observations, IR transformation, inline recording, bytecode, and both compiler hosts. KPaths also provides an opt-in cross-project integration test against a separate real compiler plugin.

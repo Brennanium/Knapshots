@@ -57,7 +57,7 @@ public class EmbeddedCompilerHost(
             val display = if (path.startsWith(sourceRoot)) sourceRoot.relativize(path).toString() else loc.path
             if (loc.line > 0) "$display:${loc.line}" else display
           }
-          diagnostics += CompilerDiagnostic(mapped, message, position)
+          diagnostics += CompilerDiagnostic(mapped, message, position, location?.column?.takeIf { it > 0 })
         }
       }
       val stdlib = Path.of(Unit::class.java.protectionDomain.codeSource.location.toURI())

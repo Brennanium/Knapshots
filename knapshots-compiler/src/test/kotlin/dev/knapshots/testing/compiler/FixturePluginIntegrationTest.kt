@@ -5,7 +5,6 @@ import java.nio.file.Path
 import java.net.URLClassLoader
 import org.jetbrains.kotlin.config.KotlinCompilerVersion
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.io.TempDir
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -199,7 +198,7 @@ class FixturePluginIntegrationTest {
     assertCompiler(input, version, host) {
       fails()
       diagnostics {
-        error("Fixture rejects First", location = "Main.kt:4")
+        error("Fixture rejects First", line = 4)
         error("Fixture rejects Second", location = "Main.kt:6")
       }
     }
@@ -223,11 +222,11 @@ class FixturePluginIntegrationTest {
     )
     assertTrue(!EmbeddedCompilerHost().compile(request).succeeded)
   }
-  @Disabled("CompilerDiagnostic currently preserves the line but not the column of a compiler diagnostic")
   @Test fun `plugin diagnostic identifies its precise column`() {
     val input = "package fixture\nannotation class Reject\n@Reject class First"
     val result = host.compile(CompilerRequest(listOf(CompilerSource("Main.kt", input)), version, emptySet()))
     val diagnostic = result.diagnostics.single { it.message.contains("Fixture rejects First") }
-    assertEquals("Main.kt:3:15", diagnostic.location)
+    assertEquals("Main.kt:3", diagnostic.location)
+    assertEquals(9, diagnostic.column)
   }
 }

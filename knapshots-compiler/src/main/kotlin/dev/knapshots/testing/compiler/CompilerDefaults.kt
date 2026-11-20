@@ -44,8 +44,10 @@ public fun assertCompiler(
   recordVersion: Boolean = configuredRecordVersion(),
   location: InlineSnapshotLocation? = null,
   bytecode: SnapshotExpectation? = null,
+  diagnostics: SnapshotExpectation? = null,
+  additionalSources: List<CompilerSource> = emptyList(),
 ) {
-  assertCompiler(source, KotlinCompilerVersion.VERSION, configuredCompiler(), fir, ir, record, recordVersion, location, bytecode)
+  assertCompiler(source, KotlinCompilerVersion.VERSION, configuredCompiler(), fir, ir, record, recordVersion, location, bytecode, diagnostics, additionalSources)
 }
 
 /** Check compilation and diagnostics with the project's configured compiler. */
