@@ -90,15 +90,29 @@ internal object InlineCompilerSnapshots {
       }
       for ((kind, value) in values) {
         val name = argumentNames[kind] ?: error("Unsupported inline snapshot kind: ${kind.name}.")
-        val matches = args.arguments.filter { it.getArgumentName()?.asName?.asString() == name }
+        val matches = args.arguments.filter {
+          it.getArgumentName()?.asName?.asString() == name ||
+            (assertionName == "sourceDiagnosticsSnapshot" && name == "expected" && it.getArgumentName() == null)
+        }
         require(matches.size <= 1) { "More than one $name argument at $file:$line." }
         val argument = matches.singleOrNull()
         if (argument == null) {
           require(!versioned) { "Record the shared $name expectation before a version-specific one." }
-          additions += name to value
+          if (assertionName == "sourceDiagnosticsSnapshot" && name == "expected") {
+            val first = args.arguments.firstOrNull()
+            val insert = first?.textRange?.startOffset ?: args.rightParenthesis?.textRange?.startOffset ?: error("Missing closing parenthesis.")
+            val replacement = if (first == null) literal(value) else "expected = ${literal(value)}, "
+            edits += Triple(insert, insert, replacement)
+          } else additions += name to value
           continue
         }
-        val expression = argument.getArgumentExpression() as? KtCallExpression
+        val rawExpression = argument.getArgumentExpression()
+        if (assertionName == "sourceDiagnosticsSnapshot" && name == "expected" && rawExpression is KtStringTemplateExpression) {
+          require(!versioned) { "Version-specific editor snapshots are not supported." }
+          setExpression(rawExpression, value)
+          continue
+        }
+        val expression = rawExpression as? KtCallExpression
           ?: error("$name must be snapshot() or SnapshotExpectation(...).")
         if (expression.calleeExpression?.text == "snapshot" && expression.valueArguments.isEmpty()) {
           require(!versioned) { "Record the shared $name expectation before a version-specific one." }
