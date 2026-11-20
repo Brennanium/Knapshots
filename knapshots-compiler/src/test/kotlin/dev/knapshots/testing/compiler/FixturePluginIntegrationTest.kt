@@ -287,4 +287,43 @@ class FixturePluginIntegrationTest {
     assertEquals("Main.kt:3", diagnostic.location)
     assertEquals(9, diagnostic.column)
   }
+  @Test fun `plugin errors in different files preserve their locations`() {
+    val sources = listOf(
+      CompilerSource("Annotations.kt", "package fixture\nannotation class Reject\nannotation class Caution"),
+      CompilerSource("Bad.kt", "package fixture\n@Reject class Invalid"),
+      CompilerSource("Other.kt", "package fixture\n@Reject class Other"),
+    )
+    val result = host.compile(CompilerRequest(sources, version, emptySet()))
+    assertTrue(!result.succeeded)
+    assertTrue(result.diagnostics.any { it.severity == CompilerDiagnosticSeverity.ERROR && it.message.contains("Fixture rejects Invalid") && it.location == "Bad.kt:2" }, result.diagnostics.toString())
+    assertTrue(result.diagnostics.any { it.severity == CompilerDiagnosticSeverity.ERROR && it.message.contains("Fixture rejects Other") && it.location == "Other.kt:2" }, result.diagnostics.toString())
+    val rendered = renderCompilerDiagnostics(sources, result.diagnostics)
+    assertContains(rendered, "// FILE: Bad.kt")
+    assertContains(rendered, "error: ")
+    assertContains(rendered, "// FILE: Other.kt")
+    assertContains(rendered, "Fixture rejects Other")
+  }
+
+  @Test fun `private generated declarations remain unavailable to another file`() {
+    val sources = listOf(
+      CompilerSource("Producer.kt", "package fixture\nannotation class AddMember\n@AddMember private class Example"),
+      CompilerSource("Consumer.kt", "package fixture\nfun value() = Example().addedMember()"),
+    )
+    val result = host.compile(CompilerRequest(sources, version, emptySet()))
+    assertTrue(!result.succeeded)
+    assertTrue(result.diagnostics.any { it.severity == CompilerDiagnosticSeverity.ERROR && it.location == "Consumer.kt:2" }, result.diagnostics.toString())
+  }
+
+  @Test fun `plugin warnings from multiple files are captured on successful compilation`() {
+    val sources = listOf(
+      CompilerSource("Annotations.kt", "package fixture\nannotation class Caution"),
+      CompilerSource("First.kt", "package fixture\n@Caution class First"),
+      CompilerSource("Second.kt", "package fixture\n@Caution class Second"),
+    )
+    val result = host.compile(CompilerRequest(sources, version, emptySet()))
+    assertTrue(result.succeeded, result.diagnostics.toString())
+    assertTrue(result.diagnostics.any { it.severity == CompilerDiagnosticSeverity.WARNING && it.message.contains("Fixture warns about First") && it.location == "First.kt:2" }, result.diagnostics.toString())
+    assertTrue(result.diagnostics.any { it.severity == CompilerDiagnosticSeverity.WARNING && it.message.contains("Fixture warns about Second") && it.location == "Second.kt:2" }, result.diagnostics.toString())
+  }
+
 }

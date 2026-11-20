@@ -127,4 +127,13 @@ class CompilerDiagnosticRenderingTest {
   @Test fun `empty diagnostics snapshot checks clean compilation`() {
     assertCompiler("val count = 1", KotlinCompilerVersion.VERSION, EmbeddedCompilerHost(), diagnostics = SnapshotExpectation(""))
   }
+  @Test fun `real compiler range accounts for supplementary unicode characters`() {
+    val source = "val marker = \"😀\"; val value = unknownIdentifier"
+    val result = EmbeddedCompilerHost().compile(CompilerRequest(listOf(CompilerSource("Unicode.kt", source)), KotlinCompilerVersion.VERSION, emptySet()))
+    val diagnostic = result.diagnostics.first { it.severity == CompilerDiagnosticSeverity.ERROR }
+    assertEquals(source.indexOf("unknownIdentifier") + 1, diagnostic.column)
+    assertEquals(source.length + 1, diagnostic.endColumn)
+    assertContains(renderCompilerDiagnostics(listOf(CompilerSource("Unicode.kt", source)), result.diagnostics), "^~~~~~~~~~~~~~~~~\nerror:")
+  }
+
 }

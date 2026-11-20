@@ -320,4 +320,29 @@ class FixtureProcessorIntegrationTest {
     assertTrue(result.succeeded, result.output)
     assertTrue(result.generatedFiles.any { (path, content) -> path.endsWith("ExampleMetadata.txt") && content == "metadata for Example\n" })
   }
+  @Test fun `processor retains warnings errors and generated source across files`() {
+    val input = """
+      package fixture
+      @Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION) annotation class AddGreeting
+      @AddGreeting class Valid
+    """
+    val warningHost = GradleKspHost(kspVersion, listOf(plugin), processorOptions = mapOf("fixture.warning" to "true"))
+    assertKsp(input, version, warningHost,
+      additionalSources = listOf(KspSource("Invalid.kt", "package fixture\n@AddGreeting fun invalid() = Unit")),
+      succeeds = false,
+      expectedDiagnostics = listOf(
+        KspDiagnosticExpectation(KspDiagnosticSeverity.WARNING, "Generating greeting for Valid", file = "src/main/kotlin/Main.kt", line = 3),
+        KspDiagnosticExpectation(KspDiagnosticSeverity.ERROR, "@AddGreeting requires a class", file = "src/main/kotlin/Invalid.kt", line = 2),
+      ),
+      generated = SnapshotExpectation("""
+        // FILE: kotlin/fixture/ValidGreeting.kt
+        package fixture
+
+        object ValidGreeting {
+          fun greet(): String = "Hello, Valid!"
+        }
+      """),
+    )
+  }
+
 }
