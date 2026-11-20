@@ -11,4 +11,10 @@ dependencies {
   testRuntimeOnly(libs.junit.platform.launcher)
 }
 
-tasks.test { useJUnitPlatform() }
+tasks.test {
+  dependsOn(":knapshots-test-ksp-processor:jar")
+  inputs.file(project(":knapshots-test-ksp-processor").layout.buildDirectory.file("libs/knapshots-test-ksp-processor-${project.version}.jar"))
+  systemProperty("knapshots.fixtureKspJar", project(":knapshots-test-ksp-processor").layout.buildDirectory.file("libs/knapshots-test-ksp-processor-${project.version}.jar").get().asFile.absolutePath)
+  systemProperty("knapshots.fixtureKspVersion", libs.versions.ksp.get())
+  useJUnitPlatform()
+}

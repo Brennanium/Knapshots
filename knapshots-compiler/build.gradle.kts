@@ -14,6 +14,7 @@ val fixturePluginJar = project(":knapshots-test-compiler-plugin").layout.buildDi
 
 tasks.test {
   dependsOn(":knapshots-test-compiler-plugin:jar")
+  inputs.file(project(":knapshots-test-compiler-plugin").layout.buildDirectory.file("libs/knapshots-test-compiler-plugin-${project.version}.jar"))
   systemProperty("knapshots.fixturePluginJar", fixturePluginJar.get().asFile.absolutePath)
   providers.gradleProperty("knapshots.kpathsCheckout").orNull?.let { systemProperty("knapshots.kpathsCheckout", it) }
   useJUnitPlatform()

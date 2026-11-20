@@ -58,3 +58,5 @@ Each expectation can specify severity, message text, relative source file, line,
 The built-in host uses temporary Gradle JVM projects, resolves the supplied Kotlin and KSP versions, and cleans them up afterwards. It does not yet cover arbitrary Gradle project configuration, multiplatform compilations, or snapshotting non-source outputs.
 
 The KPaths checkout includes real-processor integration tests when `-Pknapshots.checkout=/path/to/Knapshots` is set. They exercise generated source, processor diagnostics, binary dependencies, runtime execution, and a separately built processor project.
+
+Knapshots tests `assertKsp` against a [test-only processor](TEST-FIXTURES.md) in its own repository. It produces actual generated source and diagnostics without requiring a KPaths checkout.

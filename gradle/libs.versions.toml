@@ -1,5 +1,6 @@
 [versions]
 kotlin = "2.4.21"
+ksp = "2.3.12"
 junit = "5.13.4"
 intellij-platform = "2.20.1"
 

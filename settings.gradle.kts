@@ -20,6 +20,7 @@ include(
   ":knapshots-snapshots",
   ":knapshots-compiler",
   ":knapshots-test-compiler-plugin",
+  ":knapshots-test-ksp-processor",
   ":knapshots-compiler-gradle",
   ":knapshots-bytecode",
   ":knapshots-ksp",
