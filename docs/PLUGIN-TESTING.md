@@ -74,6 +74,20 @@ This setup is experimental and requires the Knapshots Gradle plugin and compiler
 
 With the JUnit integration and a project-configured host, a test can call `assertEditor(source)` without passing a host. Unexpected errors fail by default; reference resolution and expected diagnostics can be asserted in its block. The Gradle integration can use the test task's runtime classpath and infer selected version information. It still needs enough project configuration to apply the target Gradle plugin, locate any required IDE plugin, and launch the compatible adapter.
 
+Editor diagnostics can also be compared in source context using `sourceDiagnosticsSnapshot` inside a source-hosted assertion:
+
+```kotlin
+assertEditor("val result = missing") {
+  sourceDiagnosticsSnapshot("""
+    val result = missing
+                 ^
+    error: Unresolved reference
+  """)
+}
+```
+
+The expected text is written manually for now. Rendering uses the line and column supplied by the IDE host; diagnostics without source positions are listed separately. Exact diagnostic text varies between IDEs and plugins. Inline recording and version-specific editor snapshots remain future work.
+
 The [compatibility guide](COMPATIBILITY.md#editor-assertions-in-junit) describes the experimental Gradle settings and what is currently inferred. The adapter has not been published; a local archive or the existing checkout-based launcher is still needed. Other IDE plugin mechanisms require their own integration; enabling KEFS is not a requirement for compiler assertions.
 
 For runtime or bytecode checks, `EmbeddedCompilerHost.compile` returns class files alongside diagnostics. Call `result.classLoader()` to load a compiled class or inspect its `.class` resource after the temporary compiler directory has been removed.

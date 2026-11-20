@@ -13,7 +13,8 @@ The fixture is exercised by both embedded and Gradle compiler hosts. Tests check
 - More declaration shapes and visibility cases beyond the generated functions and properties, nested and generic classes, and downstream JVM consumer already covered.
 - Full diagnostic source ranges. The embedded compiler host captures line and column and renders a caret; range and end-position support needs further investigation.
 - Generated KSP resources. A disabled acceptance test demonstrates that the processor can produce a resource, but the Gradle host currently collects only Kotlin and Java sources.
-- Editor diagnostic recording, notes, and fix-it representations where Kotlin's compiler or IDE APIs expose them. Kotlin compiler diagnostics and IDE quick fixes are different APIs, so Swift fix-it behavior should not be assumed to map directly.
+- Editor diagnostic snapshots can be compared as plain text or in source context, but source-annotated inline recording and version-specific editor expectations are not implemented. Reusing the existing recorder by adding the embedded Kotlin compiler to the IDE fixture classpath causes class conflicts with the IDE Kotlin plugin; a shared recorder must avoid that classpath conflict.
+- Diagnostic notes and fix-it or IDE quick-fix assertions where Kotlin's APIs expose them. Kotlin compiler diagnostics and IDE quick fixes are different APIs, so Swift fix-it behavior should not be assumed to map directly.
 - Additional source formatting and escaped-string recording cases, language-mode options, and scenarios where a test should unexpectedly succeed or fail.
 - Further Kotlin-specific boundaries such as compiler-plugin ordering, bytecode bridges, and full imported-project IDE resolution. KSP multi-round and multiple-processor cases and lightweight IDE resolution are covered; they do not replace full IDE integration.
 

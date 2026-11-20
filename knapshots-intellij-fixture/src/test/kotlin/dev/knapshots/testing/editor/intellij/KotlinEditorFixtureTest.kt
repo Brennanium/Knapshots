@@ -80,6 +80,23 @@ class KotlinEditorFixtureTest : EditorFixtureTestCase() {
     """) { diagnostics { error("Fixture rejects Disallowed") } }
   }
 
+  fun testSourceDiagnosticSnapshotUsesPluginHighlight() {
+    installFixturePlugin()
+    assertEditor(fileName = "Rejected.kt", source = """
+      package fixture
+      annotation class Reject
+      @Reject class Disallowed
+    """) {
+      sourceDiagnosticsSnapshot("""
+        package fixture
+        annotation class Reject
+        @Reject class Disallowed
+                ^
+        error: [REJECTED] Fixture rejects Disallowed
+      """)
+    }
+  }
+
   fun testPluginWarningAppearsInEditorDiagnostics() {
     installFixturePlugin()
     assertEditor(fileName = "Caution.kt", source = """

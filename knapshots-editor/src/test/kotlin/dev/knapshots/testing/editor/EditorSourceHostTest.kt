@@ -55,6 +55,23 @@ class EditorSourceHostTest {
     assertEquals(true, opened?.captureDiagnostics)
   }
 
+  @Test fun `source diagnostic snapshot renders line and column`() {
+    val host = EditorSourceHost {
+      object : EditorObservations {
+        override fun diagnostics() = listOf(EditorDiagnostic(DiagnosticSeverity.ERROR, "Unresolved reference", "Test.kt:1:9"))
+        override fun reference(expression: String) = ReferenceObservation.Unresolved
+      }
+    }
+    assertEditor("val x = missing", host) {
+      sourceDiagnosticsSnapshot("val x = missing\n        ^\nerror: Unresolved reference")
+      reference("missing").isUnresolved()
+    }
+    assertFailsWith<AssertionError> { assertEditor("val x = missing", host) { sourceDiagnosticsSnapshot("") } }
+    assertFailsWith<IllegalStateException> {
+      assertEditor("val x = missing", host) { sourceDiagnosticsSnapshot(""); diagnostics { error("Unresolved") } }
+    }
+  }
+
   @Test fun `hosting does not suppress unexpected editor errors`() {
     val host = EditorSourceHost {
       object : EditorObservations {

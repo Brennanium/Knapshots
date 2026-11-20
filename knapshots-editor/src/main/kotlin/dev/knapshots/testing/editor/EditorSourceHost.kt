@@ -82,7 +82,7 @@ public fun assertEditor(
   )
   var successful = false
   try {
-    expectations.verify(observations)
+    expectations.verify(observations, sources)
     successful = true
   } finally {
     (observations as? EditorObservationSession)?.complete(successful)
