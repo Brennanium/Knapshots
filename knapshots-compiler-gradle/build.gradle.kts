@@ -6,4 +6,8 @@ dependencies {
   testImplementation(libs.junit.jupiter)
   testRuntimeOnly(libs.junit.platform.launcher)
 }
-tasks.test { useJUnitPlatform() }
+tasks.test {
+  dependsOn(":knapshots-test-compiler-plugin:jar")
+  systemProperty("knapshots.fixturePluginJar", project(":knapshots-test-compiler-plugin").layout.buildDirectory.file("libs/knapshots-test-compiler-plugin-${project.version}.jar").get().asFile.absolutePath)
+  useJUnitPlatform()
+}

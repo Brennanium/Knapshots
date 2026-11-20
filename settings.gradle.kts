@@ -19,6 +19,7 @@ rootProject.name = "Knapshots"
 include(
   ":knapshots-snapshots",
   ":knapshots-compiler",
+  ":knapshots-test-compiler-plugin",
   ":knapshots-compiler-gradle",
   ":knapshots-bytecode",
   ":knapshots-ksp",

@@ -50,7 +50,7 @@ For FIR or IR, pass the desired expectations as `fir` and `ir`. Use `record = Sn
 
 A host can use `temporaryCompilerHost` to receive a fresh temporary working directory for each compilation; Knapshots removes it when the host finishes. A caller-supplied directory is a possible future override for inspecting output or preparing project files. Its ownership, existing-file behavior, and cleanup rules are not defined yet.
 
-This setup is experimental and requires the Knapshots Gradle plugin and compiler module. KPaths' opt-in cross-project fixture exercises successful compilation, diagnostics, FIR/IR snapshots, version-specific expectations, and inline recording against its real compiler plugin.
+This setup is experimental and requires the Knapshots Gradle plugin and compiler module. Knapshots' own tests use a small [internal compiler plugin](TEST-FIXTURES.md) to exercise diagnostics, FIR/IR phase observations, IR transformation, inline recording, bytecode, and both compiler hosts. KPaths also provides an opt-in cross-project integration test against a separate real compiler plugin.
 
 ## Configuring editor assertions today
 

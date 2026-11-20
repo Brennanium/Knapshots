@@ -64,4 +64,17 @@ class JvmBytecodeTest {
     assertSnapshot(bytes, rendered, jvmBytecodeSnapshotting)
     assertFailsWith<AssertionError> { assertSnapshot(bytes, "wrong", jvmBytecodeSnapshotting) }
   }
+  @Test fun `captures bytecode transformed by the fixture plugin`() {
+    val host = EmbeddedCompilerHost(compilerArguments = listOf(
+      "-Xplugin=${checkNotNull(System.getProperty("knapshots.fixturePluginJar"))}",
+    )).withJvmBytecodeSnapshot("fixture.ExampleKt")
+    val result = host.compile(CompilerRequest(
+      listOf(CompilerSource("Example.kt", "package fixture\nfun value() = \"knapshots:input\"")),
+      KotlinVersion.CURRENT.toString(), setOf(JVM_BYTECODE),
+    ))
+    assertTrue(result.succeeded, result.diagnostics.toString())
+    val output = checkNotNull(result.captures[JVM_BYTECODE])
+    assertTrue(output.contains("knapshots:output"))
+    assertFalse(output.contains("knapshots:input"))
+  }
 }
