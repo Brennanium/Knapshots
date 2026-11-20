@@ -43,6 +43,17 @@ class EditorFixtureTest : EditorFixtureTestCase() {
     assertEditor(source = "plain text", fileName = "Example.txt") {
       diagnostics { default("should not be selected"); versioned(build, "") }
     }
+    val releaseVersion = System.getenv("KNAPSHOTS_IDE_RELEASE_VERSION")
+    val releaseName = System.getenv("KNAPSHOTS_IDE_RELEASE_NAME")
+    if (releaseVersion != null && releaseName != null) {
+      val name = releaseName.substringBefore('|').trim().removePrefix("Android Studio ")
+      val selectors = listOf(releaseVersion, releaseVersion.substringBeforeLast('.') + ".*", name, name.substringBefore(' '))
+      selectors.distinct().forEach { selector ->
+        assertEditor(source = "plain text", fileName = "Example.txt") {
+          diagnostics { default("should not be selected"); versioned(selector, "") }
+        }
+      }
+    }
   }
 
 }

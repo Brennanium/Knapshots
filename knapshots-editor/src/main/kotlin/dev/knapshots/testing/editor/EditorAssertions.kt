@@ -31,6 +31,7 @@ public interface EditorObservations {
   public fun reference(expression: String): ReferenceObservation
   /** Product-prefixed build of the IDE that produced these observations, if known. */
   public fun ideBuild(): String? = null
+  public fun ideRelease(): EditorRelease? = null
 }
 
 /**
@@ -44,7 +45,7 @@ public fun assertEditor(
   record: SnapshotRecording = configuredEditorRecording(),
   block: EditorExpectations.() -> Unit,
 ) {
-  EditorExpectations(checkDiagnostics, record, observations.ideBuild()).apply(block).resolveVersions().prepareRecordingTarget().verify(observations)
+  EditorExpectations(checkDiagnostics, record, observations.ideBuild(), observations::ideRelease).apply(block).resolveVersions().prepareRecordingTarget().verify(observations)
 }
 
 private val diagnosticSnapshotting = textSnapshotting.pullback<List<EditorDiagnostic>> { diagnostics ->
@@ -57,6 +58,7 @@ public class EditorExpectations internal constructor(
   private val checkDiagnostics: Boolean,
   private val recording: SnapshotRecording,
   private val ideBuild: String? = null,
+  private val ideRelease: () -> EditorRelease? = { null },
 ) {
   private val versionBranches = linkedMapOf<String, EditorExpectations.() -> Unit>()
   private var defaultBranch = false
@@ -88,8 +90,8 @@ public class EditorExpectations internal constructor(
   internal fun resolveVersions(): EditorExpectations {
     if (versionBranches.isEmpty()) return this
     val actual = requireNotNull(ideBuild) { "The editor host did not provide an IDE build; versioned editor assertions require the actual build." }
-    val selected = selectEditorBuild(versionBranches.keys, actual) ?: return this
-    val branch = EditorExpectations(checkDiagnostics, recording, ideBuild).also { it.isBranch = true }.apply(versionBranches.getValue(selected))
+    val selected = selectEditorBuild(versionBranches.keys, actual, ideRelease) ?: return this
+    val branch = EditorExpectations(checkDiagnostics, recording, ideBuild, ideRelease).also { it.isBranch = true }.apply(versionBranches.getValue(selected))
     if (branch.hasDiagnosticBlock || branch.expectedDiagnosticSnapshot != null || branch.hasSourceDiagnosticSnapshot) {
       expectedDiagnostics.clear()
       expectedDiagnostics.addAll(branch.expectedDiagnostics)
@@ -123,7 +125,7 @@ public class EditorExpectations internal constructor(
     check(checkDiagnostics) { "Diagnostic checking is disabled for this editor assertion." }
     check(expectedDiagnosticSnapshot == null && !hasSourceDiagnosticSnapshot && !hasDiagnosticBlock) { "Diagnostics can only be specified once." }
     hasDiagnosticBlock = true
-    DiagnosticExpectations(expectedDiagnostics, ideBuild, { expected, location ->
+    DiagnosticExpectations(expectedDiagnostics, ideBuild, ideRelease, { expected, location ->
       check(expectedDiagnostics.isEmpty() && !hasSourceDiagnosticSnapshot) { "Diagnostic snapshots and individual diagnostic expectations cannot be combined." }
       hasSourceDiagnosticSnapshot = true
       expectedSourceDiagnosticSnapshot = expected?.let(::trimSnapshotIndent)?.trimEnd('\n', '\r')
@@ -261,6 +263,7 @@ internal data class ExpectedDiagnostic(val severity: DiagnosticSeverity, val mes
 public class DiagnosticExpectations internal constructor(
   private val expected: MutableList<ExpectedDiagnostic>,
   private val ideBuild: String?,
+  private val ideRelease: () -> EditorRelease?,
   private val recordSnapshot: (String?, EditorSnapshotLocation?) -> Unit,
   private val recordVersioned: (EditorVersionedSnapshots.Entry) -> Unit,
 ) {
@@ -271,7 +274,7 @@ public class DiagnosticExpectations internal constructor(
   public fun versioned(selector: String, expected: String? = null, location: EditorSnapshotLocation? = null) {
     (versions ?: EditorVersionedSnapshots().also { versions = it }).versioned(selector, expected, location)
   }
-  internal fun finish() { versions?.let { recordVersioned(it.selected(ideBuild)) } }
+  internal fun finish() { versions?.let { recordVersioned(it.selected(ideBuild, ideRelease)) } }
 
   /** Compare or record all diagnostics rendered against the source. */
   public fun snapshot(expected: String? = null, location: EditorSnapshotLocation? = null) = recordSnapshot(expected, location)

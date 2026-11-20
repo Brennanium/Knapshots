@@ -1,29 +1,60 @@
 package dev.knapshots.testing.editor
 
-/** Selects exact IDE builds before a single matching build-family selector. */
-internal fun selectEditorBuild(selectors: Set<String>, build: String): String? {
+/** Android Studio release information associated with one exact, product-prefixed IDE build. */
+public data class EditorRelease(val build: String, val version: String, val name: String)
+
+/** Selects exact builds/releases before a single matching build, release, or name family. */
+internal fun selectEditorBuild(selectors: Set<String>, build: String, release: () -> EditorRelease? = { null }): String? {
   val buildMatch = Regex("^([A-Za-z]+)-([0-9]+(?:\\.[0-9]+)*)$").matchEntire(build)
     ?: throw IllegalArgumentException("Invalid IDE build identifier: $build")
   val product = buildMatch.groupValues[1].uppercase()
   val numbers = buildMatch.groupValues[2].split('.')
+  val buildPattern = Regex("^([A-Za-z]+)-([0-9]+(?:\\.[0-9]+)*)(\\.\\*)?$")
+  val releasePattern = Regex("^([0-9]+(?:\\.[0-9]+)+)(\\.\\*)?$")
+  val namePattern = Regex("^[A-Za-z]+(?: [0-9]+)?$")
   val parsed = selectors.associateWith { selector ->
-    Regex("^([A-Za-z]+)-([0-9]+(?:\\.[0-9]+)*)(\\.\\*)?$").matchEntire(selector)
-      ?: throw IllegalArgumentException("Invalid IDE build selector: $selector; use a product-prefixed build such as AI-262.*.")
+    val buildSelector = buildPattern.matchEntire(selector)
+    val releaseSelector = releasePattern.matchEntire(selector)
+    require(buildSelector != null || releaseSelector != null || namePattern.matches(selector)) {
+      "Invalid IDE selector: $selector; use a build, release version, or Android Studio release name."
+    }
+    buildSelector to releaseSelector
   }
-  val exact = parsed.filter { (_, match) -> match.groupValues[3].isEmpty() &&
-    match.groupValues[1].uppercase() == product && match.groupValues[2].split('.') == numbers }.keys
-  require(exact.size <= 1) { "Ambiguous exact IDE build selectors for $build: ${exact.sorted().joinToString()}." }
+  val needsRelease = parsed.any { (_, patterns) -> patterns.first == null }
+  val metadata = if (needsRelease && product == "AI") requireNotNull(release()) {
+    "Android Studio release metadata is unavailable for $build; provide verified release metadata or use a build selector."
+  }.also { require(it.build.equals(build, ignoreCase = true)) { "Release metadata for ${it.build} does not match IDE build $build." } } else null
+  val matching = parsed.mapNotNull { (selector, patterns) ->
+    val (buildSelector, releaseSelector) = patterns
+    when {
+      buildSelector != null -> {
+        val prefix = buildSelector.groupValues[2].split('.')
+        val family = buildSelector.groupValues[3].isNotEmpty()
+        val same = buildSelector.groupValues[1].uppercase() == product
+        if (same && if (family) numbers.size > prefix.size && numbers.take(prefix.size) == prefix else numbers == prefix) selector to !family else null
+      }
+      releaseSelector != null -> {
+        val current = metadata?.version?.split('.').orEmpty()
+        val prefix = releaseSelector.groupValues[1].split('.')
+        val family = releaseSelector.groupValues[2].isNotEmpty()
+        if (metadata != null && if (family) current.size > prefix.size && current.take(prefix.size) == prefix else current == prefix) selector to !family else null
+      }
+      metadata != null -> {
+        val name = metadata.name.substringBefore('|').trim().removePrefix("Android Studio ").trim()
+        if (name.equals(selector, true) || name.startsWith("$selector ", true)) selector to false else null
+      }
+      else -> null
+    }
+  }
+  val exact = matching.filter { it.second }.map { it.first }
+  require(exact.size <= 1) { "Ambiguous exact IDE selectors for $build: ${exact.sorted().joinToString()}." }
   exact.singleOrNull()?.let { return it }
-  val matches = parsed.filter { (_, match) ->
-    val prefix = match.groupValues[2].split('.')
-    match.groupValues[3].isNotEmpty() && match.groupValues[1].uppercase() == product &&
-      numbers.size > prefix.size && numbers.take(prefix.size) == prefix
-  }.keys
-  require(matches.size <= 1) { "Ambiguous IDE build selectors for $build: ${matches.sorted().joinToString()}." }
-  return matches.singleOrNull()
+  val families = matching.map { it.first }
+  require(families.size <= 1) { "Ambiguous IDE selectors for $build: ${families.sorted().joinToString()}." }
+  return families.singleOrNull()
 }
 
-/** Source-context diagnostic snapshots selected using the actual IDE build. */
+/** Source-context diagnostic snapshots selected using the actual IDE build and release. */
 public class EditorVersionedSnapshots {
   internal data class Entry(val expected: String?, val location: EditorSnapshotLocation?, val frames: Array<StackTraceElement>, val call: String)
   private var fallback: Entry? = null
@@ -35,14 +66,14 @@ public class EditorVersionedSnapshots {
   }
 
   public fun versioned(selector: String, expected: String? = null, location: EditorSnapshotLocation? = null) {
-    check(selector !in overrides) { "Duplicate IDE build selector: $selector." }
+    check(selector !in overrides) { "Duplicate IDE selector: $selector." }
     overrides[selector] = Entry(expected, location, Throwable().stackTrace, "versioned")
   }
 
-  internal fun selected(build: String?): Entry {
+  internal fun selected(build: String?, release: () -> EditorRelease?): Entry {
     val default = requireNotNull(fallback) { "A versioned editor snapshot requires default(...)." }
     if (overrides.isEmpty()) return default
     val actual = requireNotNull(build) { "The editor host did not provide an IDE build; versioned editor assertions require the actual build." }
-    return selectEditorBuild(overrides.keys, actual)?.let(overrides::getValue) ?: default
+    return selectEditorBuild(overrides.keys, actual, release)?.let(overrides::getValue) ?: default
   }
 }

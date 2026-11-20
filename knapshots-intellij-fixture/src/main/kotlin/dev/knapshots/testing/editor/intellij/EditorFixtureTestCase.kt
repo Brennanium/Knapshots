@@ -19,6 +19,7 @@ abstract class EditorFixtureTestCase : BasePlatformTestCase() {
   ) {
     val host = object : EditorSourceHost {
       override fun ideBuild(): String = ApplicationInfo.getInstance().build.asString()
+      override fun ideRelease(): dev.knapshots.testing.editor.EditorRelease? = dev.knapshots.testing.editor.AndroidStudioReleaseMetadata.resolve(ideBuild())
       override fun open(request: dev.knapshots.testing.editor.EditorRequest): dev.knapshots.testing.editor.EditorObservations {
         val main = request.sources.first()
         request.sources.drop(1).forEach { sourceFile ->

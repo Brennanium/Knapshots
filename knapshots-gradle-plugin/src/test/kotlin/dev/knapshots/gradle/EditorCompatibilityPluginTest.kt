@@ -155,7 +155,7 @@ class EditorCompatibilityPluginTest {
       <download><link>https://example.test/a-mac_arm.dmg</link><checksum>${"a".repeat(64)}</checksum></download></item></releases>"""
     Files.writeString(dir.resolve("releases.xml"), feed)
     val driver = dir.resolve("editor-driver.sh")
-    Files.writeString(driver, "#!/bin/sh\nprintf '%s\\n' \"\$2\" >> ide.txt\nprintf '%s\\n' \"\$KNAPSHOTS_IDE_PATH\" > ide-env.txt\nprintf '%s\\n' \"\$KPATHS_TEST_CHECKOUT\" > checkout-env.txt\necho editor-driver-ran\n")
+    Files.writeString(driver, "#!/bin/sh\nprintf '%s\\n' \"\$2\" >> ide.txt\nprintf '%s\\n' \"\$KNAPSHOTS_IDE_PATH\" > ide-env.txt\nprintf '%s\\n' \"\$KPATHS_TEST_CHECKOUT\" > checkout-env.txt\nprintf '%s\\n' \"\$KNAPSHOTS_IDE_RELEASE_BUILD|\$KNAPSHOTS_IDE_RELEASE_VERSION|\$KNAPSHOTS_IDE_RELEASE_NAME\" > release-env.txt\necho editor-driver-ran\n")
     check(driver.toFile().setExecutable(true))
     Files.writeString(dir.resolve("build.gradle.kts"), """
       plugins { id("dev.knapshots.compatibility") }
@@ -178,6 +178,7 @@ class EditorCompatibilityPluginTest {
     assertEquals(ide.toRealPath(), Path.of(calls.first()).toRealPath())
     assertEquals(ide.toRealPath(), Path.of(Files.readString(dir.resolve("ide-env.txt")).trim()).toRealPath())
     assertEquals("/custom checkout", Files.readString(dir.resolve("checkout-env.txt")).trim())
+    assertEquals("AI-262.123|2026.2.2.8|Studio", Files.readString(dir.resolve("release-env.txt")).trim())
     assertContains(Files.readString(dir.resolve("build/reports/knapshots/editor-compatibility.json")), "\"result\": \"passed\"")
   }
 

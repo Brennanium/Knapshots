@@ -40,6 +40,8 @@ public fun interface EditorSourceHost {
   public fun open(request: EditorRequest): EditorObservations
   /** Product-prefixed build of the IDE that will inspect the source, if known. */
   public fun ideBuild(): String? = null
+  /** Verified release metadata, resolved only when an assertion uses a release selector. */
+  public fun ideRelease(): EditorRelease? = null
 }
 
 /**
@@ -77,7 +79,7 @@ public fun assertEditor(
     require(sourceFile.fileName.isNotBlank()) { "An additional source file name must not be blank." }
     sourceFile.copy(text = sourceFile.text.trimIndent())
   }
-  val expectations = EditorExpectations(checkDiagnostics, record, host.ideBuild()).apply(block).resolveVersions().prepareRecordingTarget()
+  val expectations = EditorExpectations(checkDiagnostics, record, host.ideBuild(), host::ideRelease).apply(block).resolveVersions().prepareRecordingTarget()
   val autoTarget = if (record != SnapshotRecording.NONE && expectations.shouldAutomaticallyCaptureDiagnostics()) location ?: discoverEditorSnapshotLocation() else null
   val observations = host.open(
     EditorRequest(

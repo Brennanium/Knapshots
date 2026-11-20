@@ -67,6 +67,7 @@ public class RunnerEditorSourceHost(
     }
   }
   override fun ideBuild(): String? = ideBuild
+  override fun ideRelease(): dev.knapshots.testing.editor.EditorRelease? = ideBuild?.let(dev.knapshots.testing.editor.AndroidStudioReleaseMetadata::resolve)
 
   override fun open(request: EditorRequest): EditorObservations {
     val parent = temporaryParent ?: Path.of(System.getProperty("java.io.tmpdir"))
@@ -157,6 +158,7 @@ private class RecordedEditorObservations(
   }
 
   override fun ideBuild(): String? = ideBuild
+  override fun ideRelease(): dev.knapshots.testing.editor.EditorRelease? = ideBuild?.let(dev.knapshots.testing.editor.AndroidStudioReleaseMetadata::resolve)
 
   override fun diagnostics(): List<EditorDiagnostic> = response.diagnostics
     ?: error("The IDE did not provide diagnostics for this editor inspection.")

@@ -15,6 +15,7 @@ public class IntellijEditorObservations(
   private val ignoreMissingDependency: Boolean = false,
 ) : EditorObservations {
   override fun ideBuild(): String = ApplicationInfo.getInstance().build.asString()
+  override fun ideRelease(): dev.knapshots.testing.editor.EditorRelease? = dev.knapshots.testing.editor.AndroidStudioReleaseMetadata.resolve(ideBuild())
 
   override fun diagnostics(): List<EditorDiagnostic> = fixture.doHighlighting()
     .filterNot { ignoreMissingDependency && it.description?.contains("MISSING_DEPENDENCY") == true }

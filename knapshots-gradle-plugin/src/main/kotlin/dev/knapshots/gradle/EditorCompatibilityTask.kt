@@ -114,6 +114,9 @@ public abstract class EditorCompatibilityTask : DefaultTask() {
         val processBuilder = ProcessBuilder(args).directory(executable.parentFile).redirectErrorStream(true)
         processBuilder.environment().putAll(driverEnvironment.get())
         processBuilder.environment()["KNAPSHOTS_IDE_PATH"] = ide.toAbsolutePath().toString()
+        processBuilder.environment()["KNAPSHOTS_IDE_RELEASE_BUILD"] = "AI-${release.build}"
+        processBuilder.environment()["KNAPSHOTS_IDE_RELEASE_VERSION"] = release.version
+        processBuilder.environment()["KNAPSHOTS_IDE_RELEASE_NAME"] = release.name
         archive?.let { processBuilder.environment()["KNAPSHOTS_KEFS_ARCHIVE"] = it.toAbsolutePath().toString() }
         val process = processBuilder.start()
         process.inputStream.bufferedReader().useLines { lines -> lines.forEach { logger.lifecycle(it) } }

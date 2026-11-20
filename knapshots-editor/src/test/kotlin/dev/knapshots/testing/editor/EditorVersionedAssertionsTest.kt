@@ -11,9 +11,10 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class EditorVersionedAssertionsTest {
-  private fun host(build: String?, error: String = "problem", opened: (EditorRequest) -> Unit = {}): EditorSourceHost =
+  private fun host(build: String?, error: String = "problem", opened: (EditorRequest) -> Unit = {}, release: EditorRelease? = null): EditorSourceHost =
     object : EditorSourceHost {
       override fun ideBuild() = build
+      override fun ideRelease() = release
       override fun open(request: EditorRequest): EditorObservations {
         opened(request)
         return object : EditorObservations {
@@ -166,6 +167,54 @@ class EditorVersionedAssertionsTest {
       assertContains(Files.readString(copy), "versioned(\"AI-262.*\", \"\"\"")
     } finally {
       System.setProperty("user.dir", previous)
+    }
+  }
+
+  @Test fun `release numbers and names select verified Android Studio metadata`() {
+    val build = "AI-262.10968.63.2622.16730706"
+    val release = EditorRelease(build, "2026.2.2.8", "Android Studio Rabbit 2 | 2026.2.2")
+    for (selector in listOf("2026.2.2.8", "2026.2.2.*", "Rabbit", "Rabbit 2")) {
+      assertEquals(selector, selectEditorBuild(setOf(selector), build) { release })
+      assertEditor("bad", host(build, release = release), record = SnapshotRecording.NONE) {
+        diagnostics { default("wrong"); versioned(selector, "bad\n^\nerror: problem") }
+      }
+    }
+    assertEquals(null, selectEditorBuild(setOf("Rabbit 3"), build) { release })
+    assertFailsWith<IllegalArgumentException> { selectEditorBuild(setOf("Rabbit", "Rabbit 2"), build) { release } }
+    assertFailsWith<IllegalArgumentException> { selectEditorBuild(setOf("2026.2.2.8"), build) { release.copy(build = "AI-263.1") } }
+    assertFailsWith<IllegalArgumentException> { selectEditorBuild(setOf("Rabbit"), build) { null } }
+    assertEquals(null, selectEditorBuild(setOf("Rabbit"), "IU-262.1") { error("not Android Studio") })
+  }
+
+  @Test fun `build-only selectors do not resolve release metadata`() {
+    assertEquals("AI-262.*", selectEditorBuild(setOf("AI-262.*"), "AI-262.1") { error("not needed") })
+  }
+
+  @Test fun `official release feed lookup validates exact build and ambiguity`() {
+    val item = """<item><name>Android Studio Rabbit 2 | 2026.2.2</name><version>2026.2.2.8</version><build>AI-262.123</build></item>"""
+    val xml = "<releases>$item</releases>"
+    assertEquals(EditorRelease("AI-262.123", "2026.2.2.8", "Android Studio Rabbit 2 | 2026.2.2"),
+      AndroidStudioReleaseMetadata.find("AI-262.123", xml.byteInputStream()))
+    assertEquals(null, AndroidStudioReleaseMetadata.find("AI-262.456", xml.byteInputStream()))
+    val conflict = "<releases>$item${item.replace("2026.2.2.8", "2026.2.2.9")}</releases>"
+    assertFailsWith<IllegalArgumentException> { AndroidStudioReleaseMetadata.find("AI-262.123", conflict.byteInputStream()) }
+  }
+
+  @Test fun `records the matching release family or codename`(@TempDir directory: Path) {
+    val build = "AI-262.10968.63.2622.16730706"
+    val release = EditorRelease(build, "2026.2.2.8", "Android Studio Rabbit 2 | 2026.2.2")
+    listOf("2026.2.2.8", "2026.2.2.*", "Rabbit", "Rabbit 2").forEachIndexed { index, selector ->
+      val file = directory.resolve("Release$index.kt")
+      Files.writeString(file, "fun test() {\n  diagnostics {\n    default()\n    versioned(\"$selector\")\n  }\n}\n")
+      assertFailsWith<AssertionError> {
+        assertEditor("bad", host(build, release = release), record = SnapshotRecording.MISSING) {
+          diagnostics { default(); versioned(selector, location = EditorSnapshotLocation(file, 4)) }
+        }
+      }
+      val recorded = Files.readString(file)
+      assertContains(recorded, "default()")
+      assertContains(recorded, "versioned(\"$selector\", \"\"\"")
+      assertContains(recorded, "error: problem")
     }
   }
 
