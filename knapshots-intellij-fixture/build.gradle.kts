@@ -43,10 +43,12 @@ dependencies {
   isolatedRecorder("dev.knapshots:knapshots-compiler:0.1.0-SNAPSHOT")
 }
 tasks.test {
+  systemProperty("knapshots.editor.record", providers.gradleProperty("knapshots.recording").orElse("none").get())
   dependsOn(buildFixturePlugin, ideFixturePluginJar)
   val buildPlugin = file("../knapshots-test-compiler-plugin/build/libs/knapshots-test-compiler-plugin-0.1.0-SNAPSHOT.jar")
   inputs.file(buildPlugin)
   inputs.file(ideFixturePluginJar.flatMap { it.archiveFile })
+  inputs.files(isolatedRecorder).withPropertyName("editorRecorderClasspath")
   systemProperty("knapshots.fixtureRecorderClasspath", isolatedRecorder.asPath)
   systemProperty("knapshots.editor.recorderClasspath", isolatedRecorder.asPath)
   systemProperty("knapshots.fixtureKotlinStdlib", ideKotlinStdlib.singleFile.absolutePath)

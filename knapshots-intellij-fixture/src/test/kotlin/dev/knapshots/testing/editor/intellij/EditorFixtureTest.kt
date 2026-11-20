@@ -2,7 +2,7 @@ package dev.knapshots.testing.editor.intellij
 
 class EditorFixtureTest : EditorFixtureTestCase() {
   fun testHostsSourceWithoutDiagnostics() {
-    assertEditor(source = "plain text", fileName = "Example.txt") { }
+    assertEditor(source = "plain text", fileName = "Example.txt") { diagnostics { snapshot("") } }
   }
 
   fun testUnavailableReferenceIsAnAssertionFailure() {
@@ -26,7 +26,7 @@ class EditorFixtureTest : EditorFixtureTestCase() {
 
   fun testReportsUnexpectedRealDiagnostics() {
     val failure = runCatching {
-      assertEditor(fileName = "Broken.java", source = "class Broken { int value = missing; }") { }
+      assertEditor(fileName = "Broken.java", source = "class Broken { int value = missing; }") { diagnostics { } }
     }.exceptionOrNull()
     assertTrue(failure is AssertionError)
     assertTrue(failure?.message?.contains("Unexpected ERROR") == true)

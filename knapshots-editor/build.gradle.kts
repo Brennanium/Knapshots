@@ -14,6 +14,7 @@ dependencies {
 
 tasks.test {
   dependsOn(":knapshots-compiler:jar")
+  inputs.files(recorderTestClasspath).withPropertyName("editorRecorderClasspath")
   systemProperty("knapshots.editor.recorderClasspath", recorderTestClasspath.asPath)
   useJUnitPlatform()
 }

@@ -122,6 +122,27 @@ class KotlinEditorFixtureTest : EditorFixtureTestCase() {
     }
   }
 
+  fun testInputOnlyRecordsPluginDiagnostics() {
+    installFixturePlugin()
+    val file = java.nio.file.Files.createTempFile("knapshots-input-only", ".kt")
+    try {
+      java.nio.file.Files.writeString(file, "fun test() {\n  assertEditor(\"input\")\n}\n")
+      try {
+        assertEditor(fileName = "Rejected.kt", source = "package fixture\nannotation class Reject\n@Reject class Disallowed",
+          record = dev.knapshots.testing.snapshot.SnapshotRecording.MISSING,
+          location = dev.knapshots.testing.editor.EditorSnapshotLocation(file, 2))
+        fail("Recording must fail for review")
+      } catch (error: AssertionError) {
+        assertTrue(error.message.orEmpty().contains("Recorded editor diagnostics"))
+      }
+      val recorded = java.nio.file.Files.readString(file)
+      assertTrue(recorded.contains("diagnostics { snapshot("))
+      assertTrue(recorded.contains("error: [REJECTED] Fixture rejects Disallowed"))
+    } finally {
+      java.nio.file.Files.deleteIfExists(file)
+    }
+  }
+
   fun testIsolatedRecordingWorkerDoesNotDisruptIde() {
     val file = java.nio.file.Files.createTempFile("knapshots-ide-recorder", ".kt")
     try {

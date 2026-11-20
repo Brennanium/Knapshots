@@ -67,7 +67,8 @@ public fun assertEditor(
   checkDiagnostics: Boolean = true,
   awaitReferences: Set<String> = emptySet(),
   record: SnapshotRecording = configuredEditorRecording(),
-  block: EditorExpectations.() -> Unit,
+  location: EditorSnapshotLocation? = null,
+  block: EditorExpectations.() -> Unit = {},
 ) {
   require(fileName.isNotBlank()) { "The source file name must not be blank." }
   val sources = listOf(EditorSource(fileName, source.trimIndent())) + additionalSources.map { sourceFile ->
@@ -75,6 +76,7 @@ public fun assertEditor(
     sourceFile.copy(text = sourceFile.text.trimIndent())
   }
   val expectations = EditorExpectations(checkDiagnostics, record).apply(block)
+  val autoTarget = if (record != SnapshotRecording.NONE && expectations.shouldAutomaticallyCaptureDiagnostics()) location ?: discoverEditorSnapshotLocation() else null
   val observations = host.open(
     EditorRequest(
       sources = sources,
@@ -85,6 +87,15 @@ public fun assertEditor(
   )
   var successful = false
   try {
+    if (record == SnapshotRecording.NONE && expectations.shouldAutomaticallyCaptureDiagnostics()) {
+      throw AssertionError("Missing editor diagnostic snapshot; enable recording to insert it.")
+    }
+    if (autoTarget != null) {
+      val actual = observations.diagnostics()
+      try { recordEditorSnapshot(autoTarget, renderEditorDiagnostics(sources, actual), "assertEditor", "__diagnosticsBlock") }
+      catch (error: Exception) { throw AssertionError("Could not record editor diagnostics at ${autoTarget.file}:${autoTarget.line}: ${error.message}", error) }
+      throw AssertionError("Recorded editor diagnostics at ${autoTarget.file}:${autoTarget.line}; review and rerun the test.")
+    }
     expectations.verify(observations, sources)
     successful = true
   } finally {
@@ -116,10 +127,11 @@ public fun assertEditor(
   checkDiagnostics: Boolean = true,
   awaitReferences: Set<String> = emptySet(),
   record: SnapshotRecording = configuredEditorRecording(),
-  block: EditorExpectations.() -> Unit,
+  location: EditorSnapshotLocation? = null,
+  block: EditorExpectations.() -> Unit = {},
 ) {
   val host = checkNotNull(editorHostContext.get()) {
     "No editor host is configured; use withEditorHost or pass host to assertEditor."
   }
-  assertEditor(source, host, fileName, additionalSources, checkDiagnostics, awaitReferences, record, block)
+  assertEditor(source, host, fileName, additionalSources, checkDiagnostics, awaitReferences, record, location, block)
 }

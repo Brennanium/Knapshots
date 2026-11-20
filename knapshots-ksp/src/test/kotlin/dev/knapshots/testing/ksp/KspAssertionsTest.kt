@@ -85,6 +85,127 @@ class KspAssertionsTest {
     assertContains(result, "warning: notice")
   }
 
+  @Test fun `input only recording captures generated output and diagnostics`(@TempDir directory: Path) {
+    val file = directory.resolve("InputOnly.kt")
+    Files.writeString(file, "fun test() {\n  assertKsp(\"invalid\")\n}\n")
+    val failed = KspHost { KspResult(false, mapOf("kotlin/Partial.kt" to "class Partial"), diagnostics = listOf(KspDiagnostic(KspDiagnosticSeverity.ERROR, "bad", "src/main/kotlin/Main.kt", 1, 1))) }
+    assertFailsWith<AssertionError> {
+      assertKsp("invalid", "2.4.21", failed, record = SnapshotRecording.MISSING, location = InlineSnapshotLocation(file, 2))
+    }
+    val recorded = Files.readString(file)
+    assertContains(recorded, "generated(")
+    assertContains(recorded, "class Partial")
+    assertContains(recorded, "diagnostics { snapshot(")
+    assertContains(recorded, "error: bad")
+    val stubs = "class Diagnostics { fun snapshot(value: String) {} }\n" +
+      "class Expectations { fun generated(value: String) {} ; fun diagnostics(block: Diagnostics.() -> Unit) {} }\n" +
+      "fun assertKsp(source: String, block: Expectations.() -> Unit) {}\n"
+    val rewritten = dev.knapshots.testing.compiler.EmbeddedCompilerHost().compile(dev.knapshots.testing.compiler.CompilerRequest(
+      listOf(dev.knapshots.testing.compiler.CompilerSource("Rewritten.kt", stubs + recorded)), org.jetbrains.kotlin.config.KotlinCompilerVersion.VERSION, emptySet(),
+    ))
+    kotlin.test.assertTrue(rewritten.succeeded, rewritten.diagnostics.toString())
+    assertKsp("invalid", "2.4.21", failed, record = SnapshotRecording.NONE) {
+      generated("// FILE: kotlin/Partial.kt\nclass Partial")
+      diagnostics { snapshot("invalid\n^\nerror: bad") }
+    }
+    assertKsp("invalid", "2.4.21", failed, record = SnapshotRecording.NONE) {
+      generated("// FILE: kotlin/Partial.kt\nclass Partial")
+    }
+    assertKsp("invalid", "2.4.21", failed, record = SnapshotRecording.MISSING) { fails() }
+    assertKsp("invalid", "2.4.21", KspHost { KspResult(false, emptyMap(), "unparsed failure") }, record = SnapshotRecording.MISSING) { fails() }
+    assertKsp("invalid", "2.4.21", KspHost { KspResult(false, emptyMap(), "unparsed failure") }, record = SnapshotRecording.NONE) { diagnostics { snapshot("") } }
+    assertFailsWith<AssertionError> { assertKsp("invalid", "2.4.21", failed, record = SnapshotRecording.NONE) }
+  }
+
+  @Test fun `missing mode compares existing snapshots without locating test source`(@TempDir directory: Path) {
+    val previous = System.getProperty("user.dir")
+    try {
+      System.setProperty("user.dir", directory.toString())
+      val host = KspHost { KspResult(true, emptyMap()) }
+      assertKsp("class Input", "2.4.21", host, record = SnapshotRecording.MISSING) {
+        generated("")
+        diagnostics { snapshot("") }
+      }
+    } finally { System.setProperty("user.dir", previous) }
+  }
+
+  @Test fun `input only defaults to recording missing output`(@TempDir directory: Path) {
+    val file = directory.resolve("Default.kt")
+    Files.writeString(file, "fun test() {\n  assertKsp(\"class Input\")\n}\n")
+    val previous = System.getProperty("knapshots.ksp.record")
+    try {
+      System.clearProperty("knapshots.ksp.record")
+      assertFailsWith<AssertionError> {
+        assertKsp("class Input", "2.4.21", KspHost { KspResult(true, emptyMap()) }, location = InlineSnapshotLocation(file, 2))
+      }
+      assertContains(Files.readString(file), "generated(")
+      assertContains(Files.readString(file), "diagnostics { snapshot(")
+    } finally {
+      if (previous == null) System.clearProperty("knapshots.ksp.record") else System.setProperty("knapshots.ksp.record", previous)
+    }
+  }
+
+  @Test fun `diagnostic recording modes preserve or replace the expected snapshot`(@TempDir directory: Path) {
+    val actual = "invalid\n^\nerror: bad"
+    val host = KspHost { KspResult(false, emptyMap(), diagnostics = listOf(KspDiagnostic(KspDiagnosticSeverity.ERROR, "bad", "src/main/kotlin/Main.kt", 1, 1))) }
+    val cases = listOf(
+      Triple(SnapshotRecording.NONE, null, false), Triple(SnapshotRecording.MISSING, null, true),
+      Triple(SnapshotRecording.MISSING, "old", false), Triple(SnapshotRecording.MISSING, actual, false),
+      Triple(SnapshotRecording.FAILED, actual, false), Triple(SnapshotRecording.FAILED, "old", true),
+      Triple(SnapshotRecording.FAILED, null, true), Triple(SnapshotRecording.ALL, actual, true),
+    )
+    cases.forEachIndexed { index, (mode, expected, changes) ->
+      val file = directory.resolve("Mode$index.kt")
+      val original = "fun test() {\n  diagnostics { snapshot(\"placeholder\") }\n}\n"
+      Files.writeString(file, original)
+      val run = { assertKsp("invalid", "2.4.21", host, record = mode) {
+        diagnostics { snapshot(expected, InlineSnapshotLocation(file, 2)) }
+      } }
+      val shouldPass = !changes && expected == actual
+      if (shouldPass) run() else assertFailsWith<AssertionError> { run() }
+      if (changes) assertContains(Files.readString(file), "error: bad") else assertEquals(original, Files.readString(file))
+    }
+  }
+
+  @Test fun `input only discovers the KSP test source`(@TempDir directory: Path) {
+    val relative = Path.of("dev/knapshots/testing/ksp/KspAssertionsTest.kt")
+    val copy = directory.resolve("src/customTest/kotlin").resolve(relative)
+    Files.createDirectories(copy.parent)
+    Files.copy(Path.of("src/test/kotlin").resolve(relative), copy)
+    val previousDirectory = System.getProperty("user.dir")
+    val previousRecording = System.getProperty("knapshots.ksp.record")
+    val host = KspHost { KspResult(true, mapOf("kotlin/Generated.kt" to "class Generated")) }
+    try {
+      System.setProperty("user.dir", directory.toString())
+      System.clearProperty("knapshots.ksp.record")
+      assertFailsWith<AssertionError> { assertKsp("class Example", "2.4.21", host) }
+      val output = Files.readString(copy)
+      assertContains(output, "class Generated")
+      assertContains(output, "assertKsp(\"class Example\", \"2.4.21\", host) { generated(")
+    } finally {
+      System.setProperty("user.dir", previousDirectory)
+      if (previousRecording == null) System.clearProperty("knapshots.ksp.record") else System.setProperty("knapshots.ksp.record", previousRecording)
+    }
+  }
+
+  @Test fun `comparison only input requires a saved output snapshot`(@TempDir directory: Path) {
+    val file = directory.resolve("NoRecord.kt")
+    val original = "fun test() {\n  assertKsp(\"class Input\")\n}\n"
+    Files.writeString(file, original)
+    val host = KspHost { KspResult(true, emptyMap()) }
+    assertFailsWith<AssertionError> { assertKsp("class Input", "2.4.21", host, record = SnapshotRecording.NONE, location = InlineSnapshotLocation(file, 2)) }
+    assertEquals(original, Files.readString(file))
+  }
+
+  @Test fun `input only recording never overwrites a source edit`(@TempDir directory: Path) {
+    val file = directory.resolve("Edited.kt")
+    Files.writeString(file, "fun test() {\n  assertKsp(\"input\")\n}\n")
+    val edit = "// changed by developer\n"
+    val host = KspHost { Files.writeString(file, edit); KspResult(true, emptyMap()) }
+    assertFailsWith<AssertionError> { assertKsp("input", "2.4.21", host, record = SnapshotRecording.MISSING, location = InlineSnapshotLocation(file, 2)) }
+    assertEquals(edit, Files.readString(file))
+  }
+
   @Test fun `checks failure and diagnostics`() {
     val failed = KspHost { KspResult(false, emptyMap(), "error: invalid property") }
     assertKsp("class Input", "2.4.21", failed, succeeds = false, diagnostics = listOf("invalid property"))
@@ -117,7 +238,7 @@ class KspAssertionsTest {
     Files.writeString(file, original)
     assertFailsWith<AssertionError> {
       assertKsp("class Input", "2.4.21", KspHost { KspResult(false, emptyMap(), "error") },
-        generated = snapshot(), record = SnapshotRecording.MISSING, location = InlineSnapshotLocation(file, 2))
+        generated = snapshot(), succeeds = true, record = SnapshotRecording.MISSING, location = InlineSnapshotLocation(file, 2))
     }
     assertEquals(original, Files.readString(file))
   }

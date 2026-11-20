@@ -78,9 +78,11 @@ public class KnapshotsCompatibilityPlugin : Plugin<Project> {
           compilerPluginId(plugin)?.let { editorProject.compilerPlugin.id.convention(it) }
         }
       }
-      val editorDeclared = project.configurations.findByName("testRuntimeClasspath")?.allDependencies?.any {
-        it.group == "dev.knapshots" && it.name.startsWith("knapshots-editor")
-      } == true
+      val editorDeclared = project.configurations.filter { it.name.endsWith("RuntimeClasspath") }.any { configuration ->
+        configuration.allDependencies.any { dependency ->
+          dependency.group == "dev.knapshots" && (dependency.name.startsWith("knapshots-editor") || dependency.name == "knapshots-intellij-fixture")
+        }
+      }
       // A test may opt in per assertion at runtime, so make the isolated worker available even
       // when no project-wide recording mode has been selected.
       val recordingFiles = if (editorDeclared) project.files(recorder) else project.files()

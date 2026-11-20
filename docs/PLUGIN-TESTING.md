@@ -38,42 +38,43 @@ knapshots {
 }
 ```
 
-Knapshots uses the test task's runtime classpath and the loaded Kotlin compiler version. If the target Kotlin compiler Gradle plugin is already applied and exposes its compiler ID, the ID can be inferred. You can then check compilation without a host or version argument:
+Knapshots uses the test task's runtime classpath and the loaded Kotlin compiler version. If the target Kotlin compiler Gradle plugin is already applied and exposes its compiler ID, the ID can be inferred. You can then start with just the source:
 
 ```kotlin
-assertCompiler("class Example") {
-  succeeds()
+assertCompiler("class Example")
+```
+
+On the first run Knapshots records the available FIR and IR captures and diagnostics inline, then fails the test so you can review and rerun it. A host reports which phase captures it supports; if none are configured, the assertion records diagnostics. For a custom host, `withDefaultSnapshotKinds(setOf(CompilerSnapshotKind.FIR, CompilerSnapshotKind.IR))` declares the available default captures. Bytecode is only captured when explicitly requested.
+
+For FIR, IR, or bytecode, call `fir()`, `ir()`, or `bytecode()` inside the assertion block to record their output. The existing `fir`, `ir`, and `bytecode` parameters remain available. Use `record = SnapshotRecording.MISSING` to record missing inline snapshots, then review the changes and rerun the test. To set a default for a test project, use `knapshots { recording.set("missing") }` or `-Pknapshots.recording=missing`; an explicit assertion argument overrides it. `recordCompilerVersion.set(true)` or `-Pknapshots.recordCompilerVersion=true` records version-specific overrides. The default is `missing` when no recording mode is configured; set `none` to compare without creating or changing snapshots. An explicit `CompilerHost` remains available for integrations that need a different compiler invocation. The embedded host runs the compiler on the test runtime classpath; it does not download another compiler when a version is requested.
+
+### Output and diagnostics
+
+Input-only assertions record their default output and diagnostics the first time they run:
+
+```kotlin
+assertCompiler(compilerSource)
+assertKsp(processorSource)
+assertEditor(editorSource)
+```
+
+KSP records generated source and diagnostics; editor assertions record IDE diagnostics. Compiler assertions record the host's available default FIR and IR captures and compiler diagnostics. A clean diagnostics snapshot is empty. If an error prevents a compiler phase from being captured, the available diagnostics are still recorded. The resulting expectations are inserted into the test so subsequent runs compare them.
+
+Use the trailing block when a test needs a narrower check. For example, `fails()` checks only that compilation fails; it does not prescribe an error message:
+
+```kotlin
+assertCompiler(invalidSource) {
+  fails()
+}
+
+assertKsp(invalidSource) {
+  diagnostics { error("Expected an eligible declaration", line = 3) }
 }
 ```
 
-For FIR, IR, or bytecode, call `fir()`, `ir()`, or `bytecode()` inside the assertion block to record their output. The existing `fir`, `ir`, and `bytecode` parameters remain available. Use `record = SnapshotRecording.MISSING` to record missing inline snapshots, then review the changes and rerun the test. To set a default for a test project, use `knapshots { recording.set("missing") }` or `-Pknapshots.recording=missing`; an explicit assertion argument overrides it. `recordCompilerVersion.set(true)` or `-Pknapshots.recordCompilerVersion=true` records version-specific overrides. The default is `none` when no recording mode is configured. An explicit `CompilerHost` remains available for integrations that need a different compiler invocation. The embedded host runs the compiler on the test runtime classpath; it does not download another compiler when a version is requested.
+`succeeds()` asserts success. `diagnostics()` records only diagnostics, and `diagnostics { snapshot(...) }` compares or re-records them explicitly. These forms do not require an outcome assertion. A line without a file refers to the first source; use `file = "Other.kt"` for another source. A `column` can be checked when the host provides one. The Gradle compiler host currently reports failed build output as one diagnostic rather than individual source positions.
 
-### Recording diagnostics
-
-Compiler, KSP, and editor assertions use the same diagnostics syntax. Start with `diagnostics()` and enable recording; Knapshots replaces it with a block containing the observed source and diagnostics:
-
-```kotlin
-assertCompiler("val count: Int = \"hello\"") {
-  fails()
-  diagnostics()
-}
-
-assertKsp(invalidDeclaration) {
-  fails()
-  diagnostics()
-}
-
-assertEditor("val result = missing") {
-  diagnostics()
-  reference("missing").isUnresolved()
-}
-```
-
-You can also write `diagnostics { snapshot() }` explicitly. After recording, the snapshot is a literal inside that block. Choose `missing`, `failed`, or `all` through `knapshots { recording.set(...) }` or `-Pknapshots.recording=...`; recording updates the test and fails it so you can review and rerun. `none` compares without changing files. Each assertion also accepts `record = SnapshotRecording.MISSING` (or another mode) to override the project setting. Import `SnapshotRecording` from `dev.knapshots.testing.snapshot`. Compiler and KSP blocks also accept a `SnapshotExpectation` for version-specific diagnostics.
-
-To check one message instead of snapshotting all diagnostics, use `diagnostics { error("message", line = 3) }` or `warning(...)`. A line without a file refers to the first source; use `file = "Other.kt"` when checking another source. A `column` can be checked when the host provides one. Each host can only report the location information available to it: the Gradle compiler host currently reports failed build output as one diagnostic rather than individual source positions.
-
-The original parameter-based `diagnostics = snapshot()` for compiler assertions and `diagnosticSnapshot = snapshot()` for KSP remain supported. Snapshot and individual diagnostic expectations cannot be combined in the same diagnostics block.
+For inline compiler, KSP, and editor assertions, recording modes are `missing` (the default), `failed`, `all`, and `none`. Configure them through `knapshots { recording.set(...) }`, `-Pknapshots.recording=...`, or the assertion's `record` argument. Recording writes the test and fails it for review. In `none` mode, an input-only assertion with no saved snapshot fails instead of passing without an expectation. Compiler and KSP snapshots also accept a `SnapshotExpectation` for version-specific output. The parameter-based compiler and KSP snapshot APIs remain available.
 
 A host can use `temporaryCompilerHost` to receive a fresh temporary working directory for each compilation; Knapshots removes it when the host finishes. A caller-supplied directory is a possible future override for inspecting output or preparing project files. Its ownership, existing-file behavior, and cleanup rules are not defined yet.
 
@@ -81,9 +82,9 @@ This setup is experimental and requires the Knapshots Gradle plugin and compiler
 
 ## Configuring editor assertions today
 
-With the JUnit integration and a project-configured host, a test can call `assertEditor(source)` without passing a host. Unexpected errors fail by default; reference resolution and expected diagnostics can be asserted in its block. The Gradle integration can use the test task's runtime classpath and infer selected version information. It still needs enough project configuration to apply the target Gradle plugin, locate any required IDE plugin, and launch the compatible adapter.
+With the JUnit integration and a project-configured host, a test can call `assertEditor(source)` without passing a host. Input-only assertions snapshot the IDE diagnostics; when using focused diagnostic checks, unexpected errors fail by default. Reference resolution and expected diagnostics can be asserted in the block. The Gradle integration can use the test task's runtime classpath and infer selected version information. It still needs enough project configuration to apply the target Gradle plugin, locate any required IDE plugin, and launch the compatible adapter.
 
-Editor diagnostic snapshots use the same `diagnostics()` and `diagnostics { snapshot(...) }` forms shown above. Recording uses an isolated worker process to keep the Kotlin compiler off the IDE classpath. The IDE supplies the locations and message text; version-specific editor snapshots remain future work.
+Editor diagnostic snapshots use the input-only, `diagnostics()`, and `diagnostics { snapshot(...) }` forms shown above. Recording uses an isolated worker process to keep the Kotlin compiler off the IDE classpath. The IDE supplies the locations and message text; version-specific editor snapshots remain future work.
 
 The [compatibility guide](COMPATIBILITY.md#editor-assertions-in-junit) describes the experimental Gradle settings and what is currently inferred. The adapter has not been published; a local archive or the existing checkout-based launcher is still needed. Other IDE plugin mechanisms require their own integration; enabling KEFS is not a requirement for compiler assertions.
 

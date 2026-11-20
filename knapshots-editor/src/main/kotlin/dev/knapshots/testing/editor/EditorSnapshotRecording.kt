@@ -11,7 +11,7 @@ public class EditorSnapshotLocation(public val file: Path, public val line: Int)
 }
 
 public fun configuredEditorRecording(): SnapshotRecording {
-  val mode = System.getProperty("knapshots.editor.record", "none").uppercase(java.util.Locale.ROOT)
+  val mode = System.getProperty("knapshots.editor.record", "missing").uppercase(java.util.Locale.ROOT)
   return try { SnapshotRecording.valueOf(mode) }
   catch (_: IllegalArgumentException) { error("Invalid editor snapshot recording mode: $mode") }
 }
@@ -34,7 +34,7 @@ internal fun discoverEditorSnapshotLocation(): EditorSnapshotLocation {
 
 private object EditorRecorder {
   private var recorder: IsolatedSnapshotRecorder? = null
-  @Synchronized fun record(location: EditorSnapshotLocation, output: String, assertionName: String) {
+  @Synchronized fun record(location: EditorSnapshotLocation, output: String, assertionName: String, argumentName: String) {
     val current = recorder ?: run {
       val classpath = requireNotNull(System.getProperty("knapshots.editor.recorderClasspath")) {
         "The isolated editor recording worker is not configured."
@@ -44,8 +44,8 @@ private object EditorRecorder {
         Runtime.getRuntime().addShutdownHook(Thread { worker.close() })
       }
     }
-    current.record(location.file, location.line, assertionName, mapOf("expected" to output), location.original)
+    current.record(location.file, location.line, assertionName, mapOf(argumentName to output), location.original)
   }
 }
 
-internal fun recordEditorSnapshot(location: EditorSnapshotLocation, output: String, assertionName: String = "sourceDiagnosticsSnapshot") = EditorRecorder.record(location, output, assertionName)
+internal fun recordEditorSnapshot(location: EditorSnapshotLocation, output: String, assertionName: String = "sourceDiagnosticsSnapshot", argumentName: String = "expected") = EditorRecorder.record(location, output, assertionName, argumentName)

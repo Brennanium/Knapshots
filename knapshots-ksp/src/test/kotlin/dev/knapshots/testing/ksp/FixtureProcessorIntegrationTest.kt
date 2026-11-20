@@ -86,7 +86,6 @@ class FixtureProcessorIntegrationTest {
       diagnostics { error("@AddGreeting requires a class", line = 3) }
     }
     assertKsp(input, version, host) {
-      fails()
       diagnostics { snapshot("package fixture\n@Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION) annotation class AddGreeting\n@AddGreeting fun invalid() = Unit\nerror: @AddGreeting requires a class") }
     }
   }
@@ -102,6 +101,32 @@ class FixtureProcessorIntegrationTest {
     }
     assertContains(Files.readString(file), "diagnostics { snapshot(")
     assertContains(Files.readString(file), "error: @AddGreeting requires a class")
+  }
+
+  @Test fun `input only records actual processor diagnostics`(@TempDir directory: Path) {
+    val input = "package fixture\n@Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION) annotation class AddGreeting\n@AddGreeting fun invalid() = Unit"
+    val file = directory.resolve("InputOnly.kt")
+    Files.writeString(file, "fun test() {\n  assertKsp(\"input\")\n}\n")
+    assertFailsWith<AssertionError> {
+      assertKsp(input, version, host, record = SnapshotRecording.MISSING, location = InlineSnapshotLocation(file, 2))
+    }
+    val recorded = Files.readString(file)
+    assertContains(recorded, "generated(")
+    assertContains(recorded, "diagnostics { snapshot(")
+    assertContains(recorded, "error: @AddGreeting requires a class")
+  }
+
+  @Test fun `input only records generated source alongside a real processor warning`(@TempDir directory: Path) {
+    val file = directory.resolve("WarningInput.kt")
+    Files.writeString(file, "fun test() {\n  assertKsp(\"input\")\n}\n")
+    val warningHost = GradleKspHost(kspVersion, listOf(plugin), processorOptions = mapOf("fixture.warning" to "true"))
+    assertFailsWith<AssertionError> {
+      assertKsp(source, version, warningHost, record = SnapshotRecording.MISSING, location = InlineSnapshotLocation(file, 2))
+    }
+    val recorded = Files.readString(file)
+    assertContains(recorded, "ExampleGreeting")
+    assertContains(recorded, "warning: Generating greeting for Example")
+    assertContains(recorded, "diagnostics { snapshot(")
   }
 
   @Test fun `processor errors fail compilation with an observable diagnostic`() {

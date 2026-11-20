@@ -77,7 +77,7 @@ public class EditorExpectations internal constructor(
       hasSourceDiagnosticSnapshot = true
       expectedSourceDiagnosticSnapshot = expected?.trimIndent()?.trimEnd('\n', '\r')
       sourceSnapshotCall = "snapshot"
-      if (recording != SnapshotRecording.NONE) sourceSnapshotLocation = location ?: discoverEditorSnapshotLocation()
+      if (dev.knapshots.testing.snapshot.mayRecordSnapshot(recording, expected == null)) sourceSnapshotLocation = location ?: discoverEditorSnapshotLocation()
     }.apply(block)
     check(!hasSourceDiagnosticSnapshot || expectedDiagnostics.isEmpty()) { "Diagnostic snapshots and individual diagnostic expectations cannot be combined." }
   }
@@ -99,13 +99,16 @@ public class EditorExpectations internal constructor(
     }
     hasSourceDiagnosticSnapshot = true
     expectedSourceDiagnosticSnapshot = expected?.trimIndent()?.trimEnd('\n', '\r')
-    if (recording != SnapshotRecording.NONE) sourceSnapshotLocation = location ?: discoverEditorSnapshotLocation()
+    if (dev.knapshots.testing.snapshot.mayRecordSnapshot(recording, expected == null)) sourceSnapshotLocation = location ?: discoverEditorSnapshotLocation()
   }
 
   public fun reference(expression: String): ReferenceExpectation {
     require(expression.isNotBlank()) { "A reference expression must not be blank." }
     return ReferenceExpectation(expression).also(references::add)
   }
+
+  internal fun shouldAutomaticallyCaptureDiagnostics(): Boolean = checkDiagnostics && !hasDiagnosticBlock &&
+    expectedDiagnosticSnapshot == null && !hasSourceDiagnosticSnapshot && references.isEmpty()
 
   internal fun requestedReferences(): Set<String> = references.mapTo(linkedSetOf()) { it.expression }
 
@@ -134,13 +137,7 @@ public class EditorExpectations internal constructor(
     val sourceSnapshot = expectedSourceDiagnosticSnapshot
     if (hasSourceDiagnosticSnapshot) {
       checkNotNull(sources) { "Source diagnostic snapshots require a source-hosted assertEditor." }
-      val rendered = renderSourceDiagnostics(sources.map { DiagnosticSource(it.fileName, it.text) }, actual.map { diagnostic ->
-        val match = diagnostic.location?.replace('\\', '/')?.let { Regex("^(.*):(\\d+):(\\d+)$").matchEntire(it) }
-        val lineOnly = if (match == null) diagnostic.location?.replace('\\', '/')?.let { Regex("^(.*):(\\d+)$").matchEntire(it) } else null
-        SourceDiagnostic(diagnostic.severity.name, diagnostic.message, match?.groupValues?.get(1) ?: lineOnly?.groupValues?.get(1),
-          match?.groupValues?.get(2)?.toIntOrNull() ?: lineOnly?.groupValues?.get(2)?.toIntOrNull(),
-          match?.groupValues?.get(3)?.toIntOrNull(), diagnostic.location)
-      })
+      val rendered = renderEditorDiagnostics(sources, actual)
       val difference = sourceSnapshot?.let { compareSnapshot(rendered, it, textSnapshotting) }
       val shouldRecord = dev.knapshots.testing.snapshot.shouldRecordSnapshot(
         recording, missing = sourceSnapshot == null, differs = sourceSnapshot == null || difference != null,
@@ -150,7 +147,7 @@ public class EditorExpectations internal constructor(
         recordEditorSnapshot(location, rendered, sourceSnapshotCall)
         throw AssertionError("Recorded editor diagnostics at ${location.file}:${location.line}; review and rerun the test.")
       }
-      checkNotNull(sourceSnapshot) { "Missing source diagnostic snapshot; enable recording to insert it." }
+      if (sourceSnapshot == null) throw AssertionError("Missing source diagnostic snapshot; enable recording to insert it.")
       if (difference != null) failures += "Source diagnostic snapshot differs:\nExpected:\n${difference.expected}\nActual:\n${difference.actual}"
     } else if (expectedSnapshot != null) {
       val difference = compareSnapshot(actual, expectedSnapshot, diagnosticSnapshotting)
@@ -224,4 +221,14 @@ public class ReferenceExpectation internal constructor(internal val expression: 
     check(shouldResolve == null) { "A reference expectation can only be specified once." }
     shouldResolve = value
   }
+}
+
+internal fun renderEditorDiagnostics(sources: List<EditorSource>, actual: List<EditorDiagnostic>): String {
+  return renderSourceDiagnostics(sources.map { DiagnosticSource(it.fileName, it.text) }, actual.map { diagnostic ->
+        val match = diagnostic.location?.replace('\\', '/')?.let { Regex("^(.*):(\\d+):(\\d+)$").matchEntire(it) }
+        val lineOnly = if (match == null) diagnostic.location?.replace('\\', '/')?.let { Regex("^(.*):(\\d+)$").matchEntire(it) } else null
+        SourceDiagnostic(diagnostic.severity.name, diagnostic.message, match?.groupValues?.get(1) ?: lineOnly?.groupValues?.get(1),
+          match?.groupValues?.get(2)?.toIntOrNull() ?: lineOnly?.groupValues?.get(2)?.toIntOrNull(),
+          match?.groupValues?.get(3)?.toIntOrNull(), diagnostic.location)
+      })
 }

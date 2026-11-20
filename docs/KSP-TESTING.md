@@ -6,26 +6,20 @@
 import dev.knapshots.testing.ksp.assertKsp
 
 @Test fun `generates a catalog`() {
-  assertKsp(
-    source = """
-      @GenerateCatalog data class Person(val name: String)
-    """,
-  ) {
-    succeeds()
-    generated()
-  }
+  assertKsp("""
+    @GenerateCatalog data class Person(val name: String)
+  """)
 }
 ```
 
-Enable `knapshots.ksp.record=missing` as a test JVM system property to record the generated source into the test, then review and rerun. With the Knapshots Gradle plugin, `knapshots { recording.set("missing") }` or `-Pknapshots.recording=missing` configures recording for compiler, KSP, and editor assertions together. `none`, `missing`, `failed`, and `all` select the recording behavior. `generated(SnapshotExpectation(...))` supports compiler-version overrides, as does the existing `generated = SnapshotExpectation(...)` parameter. Set `knapshots.ksp.recordVersion=true` to record a version-specific override for an existing default snapshot.
+The first run records generated source and diagnostics inline, then fails so you can review and rerun. Missing snapshots record by default. Use `record = SnapshotRecording.NONE` to compare without writing, or select `failed` or `all` for re-recording. The Knapshots Gradle plugin's `recording` setting applies to compiler, KSP, and editor assertions together. `generated(SnapshotExpectation(...))` supports compiler-version overrides, as does the existing `generated = SnapshotExpectation(...)` parameter. Set `knapshots.ksp.recordVersion=true` to record a version-specific override for an existing default snapshot.
 
 Configure the test JVM once with `knapshots.ksp.version`, `knapshots.ksp.processorClasspath`, and `knapshots.ksp.classpath`. The classpath values use the host platform's path separator. Include the processor and all of its runtime dependencies on the processor classpath; put types imported by test sources on the compilation classpath. The Kotlin compiler version defaults to the compiler bundled with Knapshots and can be overridden with `knapshots.ksp.kotlinVersion`. Alternatively, register one `KspHostProvider` service or pass a `GradleKspHost` explicitly.
 
-For a failing processor, use the same diagnostics DSL as compiler and editor tests:
+For an outcome-only test, use `fails()` or `succeeds()`. To record only diagnostics, use the same diagnostics DSL as compiler and editor tests:
 
 ```kotlin
 assertKsp("""@GenerateCatalog class Example""") {
-  fails()
   diagnostics()
 }
 ```
