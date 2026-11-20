@@ -51,15 +51,20 @@ public fun assertCompiler(
 }
 
 /** Check compilation and diagnostics with the project's configured compiler. */
-public fun assertCompiler(source: String, block: CompilerExpectations.() -> Unit) {
-  assertCompiler(source, KotlinCompilerVersion.VERSION, configuredCompiler(), block = block)
+public fun assertCompiler(
+  source: String,
+  record: SnapshotRecording = configuredRecording(),
+  recordVersion: Boolean = configuredRecordVersion(),
+  block: CompilerExpectations.() -> Unit,
+) {
+  assertCompiler(source, KotlinCompilerVersion.VERSION, configuredCompiler(), record = record, recordVersion = recordVersion, block = block)
 }
 
-private fun configuredRecording(): SnapshotRecording {
+internal fun configuredRecording(): SnapshotRecording {
   val value = System.getProperty("knapshots.compiler.record", "none")
   return try { SnapshotRecording.valueOf(value.uppercase(java.util.Locale.ROOT)) }
   catch (_: IllegalArgumentException) { error("Invalid knapshots.compiler.record '$value'; use none, missing, failed, or all.") }
 }
 
-private fun configuredRecordVersion(): Boolean =
+internal fun configuredRecordVersion(): Boolean =
   System.getProperty("knapshots.compiler.recordVersion", "false").toBooleanStrict()

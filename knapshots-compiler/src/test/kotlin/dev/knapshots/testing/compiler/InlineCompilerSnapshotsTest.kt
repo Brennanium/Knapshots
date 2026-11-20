@@ -4,7 +4,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
-import kotlin.test.Test
+import org.junit.jupiter.api.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -94,6 +94,22 @@ class InlineCompilerSnapshotsTest {
       val second = updated.indexOf("result for 7")
       assertTrue(first >= 0 && second > first, updated)
     }
+  }
+
+  @Test
+  fun `a batch preserves source history for later recordings`(@TempDir directory: Path) {
+    val file = directory.resolve("Batch.kt")
+    val original = "fun first() {\n  fir()\n}\nfun second() {\n  ir()\n}\nfun third() {\n  bytecode()\n}\n"
+    Files.writeString(file, original)
+    recordInlineSnapshotBatch(listOf(
+      InlineSnapshotUpdate(InlineSnapshotLocation(file, 2), "fir", mapOf("expected" to "fir output"), original),
+      InlineSnapshotUpdate(InlineSnapshotLocation(file, 5), "ir", mapOf("expected" to "ir output"), original),
+    ), "2.4.21")
+    recordInlineSnapshots(InlineSnapshotLocation(file, 8), "bytecode", mapOf("expected" to "bytecode output"), "2.4.21", expectedSource = original)
+    val output = Files.readString(file)
+    assertContains(output, "fir output")
+    assertContains(output, "ir output")
+    assertContains(output, "bytecode output")
   }
 
   @Test

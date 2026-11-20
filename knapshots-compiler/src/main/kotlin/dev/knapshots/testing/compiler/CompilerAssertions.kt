@@ -65,12 +65,16 @@ public fun assertCompiler(
   compilerVersion: String,
   compiler: CompilerHost,
   fileName: String = "Main.kt",
+  record: SnapshotRecording = configuredRecording(),
+  recordVersion: Boolean = configuredRecordVersion(),
   block: CompilerExpectations.() -> Unit,
 ) {
   assertCompiler(
     sources = listOf(CompilerSource(fileName, source)),
     compilerVersion = compilerVersion,
     compiler = compiler,
+    record = record,
+    recordVersion = recordVersion,
     block = block,
   )
 }
@@ -80,6 +84,8 @@ public fun assertCompiler(
   sources: List<CompilerSource>,
   compilerVersion: String,
   compiler: CompilerHost,
+  record: SnapshotRecording = configuredRecording(),
+  recordVersion: Boolean = configuredRecordVersion(),
   block: CompilerExpectations.() -> Unit,
 ) {
   require(sources.isNotEmpty()) { "At least one compiler source is required." }
@@ -88,7 +94,7 @@ public fun assertCompiler(
     require(source.fileName.isNotBlank()) { "A compiler source file name must not be blank." }
   }
 
-  val expectations = CompilerExpectations().apply(block)
+  val expectations = CompilerExpectations(record, recordVersion).apply(block)
   val result = compiler.compile(
     CompilerRequest(
       sources = sources.map { source -> source.copy(text = source.text.trimIndent()) },
@@ -96,14 +102,23 @@ public fun assertCompiler(
       captures = expectations.snapshotKinds(),
     ),
   )
-  expectations.verify(result, compilerVersion, sources.first().fileName)
+  expectations.verify(result, compilerVersion, sources.map { it.copy(text = it.text.trimIndent()) })
 }
 
 /** Configures the result expected from [assertCompiler]. */
-public class CompilerExpectations internal constructor() {
+public class CompilerExpectations internal constructor(
+  private val recording: SnapshotRecording = SnapshotRecording.NONE,
+  private val recordVersion: Boolean = false,
+) {
   private var expectedSuccess: Boolean? = null
   private val expectedDiagnostics = mutableListOf<ExpectedCompilerDiagnostic>()
+  private var hasDiagnosticSnapshot = false
+  private var diagnosticSnapshot: SnapshotExpectation? = null
+  private var diagnosticLocation: InlineSnapshotLocation? = null
+  private var diagnosticCall: String = "snapshot"
+  private var originalTestSource: String? = null
   private val expectedSnapshots = linkedMapOf<CompilerSnapshotKind, SnapshotExpectation>()
+  private val phaseUpdates = mutableMapOf<CompilerSnapshotKind, Triple<InlineSnapshotLocation, String, String>>()
 
   /** Expects the compiler to complete successfully. */
   public fun succeeds() {
@@ -115,81 +130,99 @@ public class CompilerExpectations internal constructor() {
     expectSuccess(false)
   }
 
-  /** Checks individual diagnostics. Unmatched error diagnostics fail by default. */
-  public fun diagnostics(block: CompilerDiagnosticExpectations.() -> Unit) {
-    CompilerDiagnosticExpectations(expectedDiagnostics).apply(block)
+  /** Record a diagnostic snapshot, expanding to a diagnostics block. */
+  public fun diagnostics(location: InlineSnapshotLocation? = null) {
+    diagnostics { snapshot(location = location) }
+    diagnosticCall = "diagnostics"
   }
 
-  /** Expects one named compiler capture, with optional compiler-version-specific output. */
-  public fun snapshot(kind: CompilerSnapshotKind, expected: SnapshotExpectation) {
-    check(expectedSnapshots.put(kind, expected) == null) {
-      "A ${kind.name} compiler snapshot was already requested."
+  /** Checks individual diagnostics. Unmatched error diagnostics fail by default. */
+  public fun diagnostics(block: CompilerDiagnosticExpectations.() -> Unit) {
+    CompilerDiagnosticExpectations(expectedDiagnostics) { expected, location ->
+      check(!hasDiagnosticSnapshot && expectedDiagnostics.isEmpty()) { "Diagnostic snapshots and individual expectations cannot be combined." }
+      hasDiagnosticSnapshot = true
+      diagnosticSnapshot = expected
+      if (recording != SnapshotRecording.NONE) {
+        diagnosticLocation = location ?: discoverInlineSnapshotLocation()
+        originalTestSource = java.nio.file.Files.readString(checkNotNull(diagnosticLocation).file)
+      }
+    }.apply(block)
+    check(!hasDiagnosticSnapshot || expectedDiagnostics.isEmpty()) { "Diagnostic snapshots and individual expectations cannot be combined." }
+  }
+
+  private fun phase(kind: CompilerSnapshotKind, expected: SnapshotExpectation, call: String, location: InlineSnapshotLocation?) {
+    check(expectedSnapshots.put(kind, expected) == null) { "A ${kind.name} compiler snapshot was already requested." }
+    if (recording != SnapshotRecording.NONE) {
+      val target = location ?: discoverInlineSnapshotLocation()
+      phaseUpdates[kind] = Triple(target, call, java.nio.file.Files.readString(target.file))
     }
   }
 
-  /** Convenience for an exact, version-independent capture. */
-  public fun snapshot(kind: CompilerSnapshotKind, expected: String) {
-    snapshot(kind, SnapshotExpectation(expected))
-  }
+  /** Expects one named compiler capture, with optional compiler-version-specific output. */
+  public fun snapshot(kind: CompilerSnapshotKind, expected: SnapshotExpectation, location: InlineSnapshotLocation? = null) = phase(kind, expected, "snapshot", location)
+  public fun snapshot(kind: CompilerSnapshotKind, expected: String, location: InlineSnapshotLocation? = null) = phase(kind, SnapshotExpectation(expected), "snapshot", location)
 
-  /** Convenience for an FIR capture. */
-  public fun fir(expected: SnapshotExpectation) {
-    snapshot(CompilerSnapshotKind.FIR, expected)
-  }
+  /** Compare or record a FIR capture. */
+  public fun fir(expected: SnapshotExpectation = dev.knapshots.testing.compiler.snapshot(), location: InlineSnapshotLocation? = null) = phase(CompilerSnapshotKind.FIR, expected, "fir", location)
+  public fun fir(expected: String, location: InlineSnapshotLocation? = null) = phase(CompilerSnapshotKind.FIR, SnapshotExpectation(expected), "fir", location)
 
-  /** Convenience for an exact, version-independent FIR capture. */
-  public fun fir(expected: String) {
-    fir(SnapshotExpectation(expected))
-  }
+  /** Compare or record an IR capture. */
+  public fun ir(expected: SnapshotExpectation = dev.knapshots.testing.compiler.snapshot(), location: InlineSnapshotLocation? = null) = phase(CompilerSnapshotKind.IR, expected, "ir", location)
+  public fun ir(expected: String, location: InlineSnapshotLocation? = null) = phase(CompilerSnapshotKind.IR, SnapshotExpectation(expected), "ir", location)
 
-  /** Convenience for an IR capture. */
-  public fun ir(expected: SnapshotExpectation) {
-    snapshot(CompilerSnapshotKind.IR, expected)
-  }
-
-  /** Convenience for an exact, version-independent IR capture. */
-  public fun ir(expected: String) {
-    ir(SnapshotExpectation(expected))
-  }
-
-  /** Convenience for a JVM bytecode capture supplied by the compiler host. */
-  public fun bytecode(expected: SnapshotExpectation) {
-    snapshot(CompilerSnapshotKind.BYTECODE, expected)
-  }
-
-  /** Convenience for an exact, version-independent JVM bytecode capture. */
-  public fun bytecode(expected: String) {
-    bytecode(SnapshotExpectation(expected))
-  }
+  /** Compare or record a JVM bytecode capture supplied by the compiler host. */
+  public fun bytecode(expected: SnapshotExpectation = dev.knapshots.testing.compiler.snapshot(), location: InlineSnapshotLocation? = null) = phase(CompilerSnapshotKind.BYTECODE, expected, "bytecode", location)
+  public fun bytecode(expected: String, location: InlineSnapshotLocation? = null) = phase(CompilerSnapshotKind.BYTECODE, SnapshotExpectation(expected), "bytecode", location)
 
   internal fun snapshotKinds(): Set<CompilerSnapshotKind> = expectedSnapshots.keys
 
-  internal fun verify(result: CompilerResult, compilerVersion: String, primaryFile: String) {
+  internal fun verify(result: CompilerResult, compilerVersion: String, sources: List<CompilerSource>) {
     val failures = mutableListOf<String>()
     when (expectedSuccess) {
       true -> if (!result.succeeded) failures += "Expected compilation to succeed, but it failed."
       false -> if (result.succeeded) failures += "Expected compilation to fail, but it succeeded."
       null -> failures += "Specify whether compilation succeeds or fails using succeeds() or fails()."
     }
-    verifyDiagnostics(result.diagnostics, failures, primaryFile)
+    if (!hasDiagnosticSnapshot) verifyDiagnostics(result.diagnostics, failures, sources.first().fileName)
+    val updates = mutableListOf<InlineSnapshotUpdate>()
     expectedSnapshots.forEach { (kind, expected) ->
       val actual = result.captures[kind]
       if (actual == null) {
         failures += "The compiler did not provide the requested ${kind.name} snapshot."
+      } else if (shouldRecordSnapshot(expected, actual, compilerVersion, recording, recordVersion)) {
+        val (target, call, original) = checkNotNull(phaseUpdates[kind])
+        updates += InlineSnapshotUpdate(target, call, mapOf("expected" to actual), original)
+      } else if (expected.missing) {
+        failures += "Missing ${kind.name} snapshot; enable recording to insert it."
       } else {
-        val difference = compareSnapshot(
-          actual.trimEnd('\n', '\r'),
-          expected.forVersion(compilerVersion).trimIndent().trimEnd('\n', '\r'),
-          textSnapshotting,
-        )
-        if (difference != null) {
-          failures += "${kind.name} snapshot for Kotlin $compilerVersion differs:\n" +
-            "Expected:\n${difference.expected}\nActual:\n${difference.actual}"
-        }
+        val difference = compareSnapshot(actual.trimEnd('\n', '\r'), expected.forVersion(compilerVersion).trimIndent().trimEnd('\n', '\r'), textSnapshotting)
+        if (difference != null) failures += "${kind.name} snapshot for Kotlin $compilerVersion differs:\nExpected:\n${difference.expected}\nActual:\n${difference.actual}"
       }
     }
-    if (failures.isNotEmpty()) {
-      throw AssertionError(failures.joinToString("\n", prefix = "Compiler assertions failed:\n"))
+    if (hasDiagnosticSnapshot) {
+      val actual = renderCompilerDiagnostics(sources, result.diagnostics)
+      val expectation = diagnosticSnapshot ?: dev.knapshots.testing.compiler.snapshot()
+      if (shouldRecordSnapshot(expectation, actual, compilerVersion, recording, recordVersion)) {
+        updates += InlineSnapshotUpdate(checkNotNull(diagnosticLocation), diagnosticCall, mapOf("expected" to actual), originalTestSource)
+      } else if (expectation.missing) {
+        failures += "Missing diagnostic snapshot; enable recording to insert it."
+      } else {
+        val difference = compareSnapshot(actual, expectation.forVersion(compilerVersion).trimIndent().trimEnd('\n', '\r'), textSnapshotting)
+        if (difference != null) failures += "Diagnostic snapshot differs:\nExpected:\n${difference.expected}\nActual:\n${difference.actual}"
+      }
+    }
+    if (failures.isNotEmpty()) throw AssertionError(failures.joinToString("\n", prefix = "Compiler assertions failed:\n"))
+    if (updates.isNotEmpty()) {
+      try {
+        if (updates.size == 1) {
+          val update = updates.single()
+          recordInlineSnapshots(update.location, update.assertionName, update.values, compilerVersion, recordVersion, update.expectedSource)
+        } else recordInlineSnapshotBatch(updates, compilerVersion, recordVersion)
+      } catch (error: Exception) {
+        throw AssertionError("Could not record compiler snapshots: ${error.message}", error)
+      }
+      val description = if (updates.size == 1 && hasDiagnosticSnapshot && updates.single().location == diagnosticLocation) "diagnostics" else "compiler snapshots"
+      throw AssertionError("Recorded $description; review and rerun the test.")
     }
   }
 
@@ -207,7 +240,10 @@ public class CompilerExpectations internal constructor() {
         if (visited[index] || diagnostic.severity != expected.severity ||
           !diagnostic.message.contains(expected.messageContains) ||
           (expected.location != null && expected.location != diagnostic.location) ||
-          (expected.line != null && diagnostic.location != "$primaryFile:${expected.line}")) continue
+          (expected.file != null && diagnostic.location?.substringBeforeLast(':') != expected.file) ||
+          (expected.file == null && expected.line == null && expected.column != null && diagnostic.location?.substringBeforeLast(':') != primaryFile) ||
+          (expected.line != null && diagnostic.location != "${expected.file ?: primaryFile}:${expected.line}") ||
+          (expected.column != null && diagnostic.column != expected.column)) continue
         visited[index] = true
         if (owner[index] == -1 || assign(owner[index], visited)) {
           owner[index] = expectedIndex
@@ -236,24 +272,32 @@ internal data class ExpectedCompilerDiagnostic(
   val messageContains: String,
   val location: String?,
   val line: Int?,
+  val file: String?,
+  val column: Int?,
 )
 
 /** Builder for expected compiler diagnostics. */
 public class CompilerDiagnosticExpectations internal constructor(
   private val expected: MutableList<ExpectedCompilerDiagnostic>,
+  private val recordSnapshot: (SnapshotExpectation?, InlineSnapshotLocation?) -> Unit,
 ) {
-  public fun error(messageContains: String, location: String? = null, line: Int? = null) {
-    expect(CompilerDiagnosticSeverity.ERROR, messageContains, location, line)
+  /** Compare or record all diagnostics rendered against the source. */
+  public fun snapshot(expected: String? = null, location: InlineSnapshotLocation? = null) = recordSnapshot(expected?.let(::SnapshotExpectation), location)
+  public fun snapshot(expected: SnapshotExpectation, location: InlineSnapshotLocation? = null) = recordSnapshot(expected, location)
+  public fun error(messageContains: String, location: String? = null, line: Int? = null, file: String? = null, column: Int? = null) {
+    expect(CompilerDiagnosticSeverity.ERROR, messageContains, location, line, file, column)
   }
 
-  public fun warning(messageContains: String, location: String? = null, line: Int? = null) {
-    expect(CompilerDiagnosticSeverity.WARNING, messageContains, location, line)
+  public fun warning(messageContains: String, location: String? = null, line: Int? = null, file: String? = null, column: Int? = null) {
+    expect(CompilerDiagnosticSeverity.WARNING, messageContains, location, line, file, column)
   }
 
-  private fun expect(severity: CompilerDiagnosticSeverity, messageContains: String, location: String?, line: Int?) {
+  private fun expect(severity: CompilerDiagnosticSeverity, messageContains: String, location: String?, line: Int?, file: String?, column: Int?) {
+    require(column == null || column > 0) { "Diagnostic column must be positive." }
+    require(file == null || file.isNotBlank()) { "Diagnostic file must not be blank." }
     require(line == null || line > 0) { "Diagnostic line must be positive." }
     require(messageContains.isNotBlank()) { "Expected diagnostic message must not be blank." }
-    expected += ExpectedCompilerDiagnostic(severity, messageContains, location, line)
+    expected += ExpectedCompilerDiagnostic(severity, messageContains, location, line, file, column)
   }
 }
 

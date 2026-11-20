@@ -64,10 +64,15 @@ internal object InlineCompilerSnapshots {
       val environment = KotlinCoreEnvironment.createForTests(disposable, configuration, EnvironmentConfigFiles.JVM_CONFIG_FILES)
       val parsed = KtPsiFactory(environment.project).createFile(original)
       fun lineOf(offset: Int) = original.take(offset).count { it == '\n' } + 1
-      val candidates = PsiTreeUtil.collectElementsOfType(parsed, KtCallExpression::class.java).filter {
+      val matchingCalls = PsiTreeUtil.collectElementsOfType(parsed, KtCallExpression::class.java).filter {
         it.calleeExpression?.text == assertionName &&
           currentLine in lineOf(it.textRange.startOffset)..lineOf(it.textRange.endOffset)
       }
+      // A generic phase assertion can contain snapshot() as its argument. Select the outer
+      // call while still rejecting unrelated calls that happen to share a line.
+      val candidates = matchingCalls.filter { candidate -> matchingCalls.none { other ->
+        other !== candidate && PsiTreeUtil.isAncestor(other, candidate, true)
+      } }
       require(candidates.size == 1) { "Expected exactly one $assertionName call at $file:$line, found ${candidates.size}." }
       val call = candidates.single()
       val args = call.valueArgumentList ?: error("assertCompiler has no argument list at $file:$line.")
@@ -88,17 +93,37 @@ internal object InlineCompilerSnapshots {
         require(expression is KtStringTemplateExpression) { "Snapshot must be a literal string, got ${expression.text}." }
         edits += Triple(expression.textRange.startOffset, expression.textRange.endOffset, literal(value))
       }
-      for ((kind, value) in values) {
+      if (assertionName == "diagnostics") {
+        require(!versioned && values.size == 1 && args.arguments.size <= 1 && call.lambdaArguments.isEmpty()) {
+          "Record a shared diagnostics() snapshot before version-specific output."
+        }
+        val argument = args.arguments.singleOrNull()
+        require(argument == null || argument.getArgumentName()?.asName?.asString() in listOf(null, "location")) {
+          "Unsupported diagnostics() argument."
+        }
+        val location = argument?.getArgumentExpression()?.text?.let { ", location = $it" } ?: ""
+        val value = values.values.single()
+        edits += Triple(call.textRange.startOffset, call.textRange.endOffset, "diagnostics { snapshot(${literal(value)}$location) }")
+      } else for ((kind, value) in values) {
         val name = argumentNames[kind] ?: error("Unsupported inline snapshot kind: ${kind.name}.")
-        val matches = args.arguments.filter {
-          it.getArgumentName()?.asName?.asString() == name ||
-            (assertionName == "sourceDiagnosticsSnapshot" && name == "expected" && it.getArgumentName() == null)
+        val named = args.arguments.filter { it.getArgumentName()?.asName?.asString() == name }
+        val positional = args.arguments.filter { it.getArgumentName() == null }
+        val special = assertionName in setOf("sourceDiagnosticsSnapshot", "snapshot", "generated", "fir", "ir", "bytecode") && name == "expected"
+        val matches = if (named.isNotEmpty() || !special) named else {
+          val first = positional.firstOrNull()?.getArgumentExpression()
+          val second = positional.getOrNull(1)?.getArgumentExpression()
+          val firstIsExpectation = first is KtStringTemplateExpression ||
+            (first is KtCallExpression && first.calleeExpression?.text in setOf("snapshot", "SnapshotExpectation"))
+          val secondIsExpectation = second is KtStringTemplateExpression ||
+            (second is KtCallExpression && second.calleeExpression?.text in setOf("snapshot", "SnapshotExpectation"))
+          val index = if (assertionName == "snapshot" && !firstIsExpectation && secondIsExpectation) 1 else 0
+          listOfNotNull(positional.getOrNull(index))
         }
         require(matches.size <= 1) { "More than one $name argument at $file:$line." }
         val argument = matches.singleOrNull()
         if (argument == null) {
           require(!versioned) { "Record the shared $name expectation before a version-specific one." }
-          if (assertionName == "sourceDiagnosticsSnapshot" && name == "expected") {
+          if (assertionName in setOf("sourceDiagnosticsSnapshot", "snapshot", "generated", "fir", "ir", "bytecode") && name == "expected") {
             val first = args.arguments.firstOrNull()
             val insert = first?.textRange?.startOffset ?: args.rightParenthesis?.textRange?.startOffset ?: error("Missing closing parenthesis.")
             val replacement = if (first == null) literal(value) else "expected = ${literal(value)}, "
@@ -107,8 +132,8 @@ internal object InlineCompilerSnapshots {
           continue
         }
         val rawExpression = argument.getArgumentExpression()
-        if (assertionName == "sourceDiagnosticsSnapshot" && name == "expected" && rawExpression is KtStringTemplateExpression) {
-          require(!versioned) { "Version-specific editor snapshots are not supported." }
+        if (assertionName in setOf("sourceDiagnosticsSnapshot", "snapshot", "generated", "fir", "ir", "bytecode") && name == "expected" && rawExpression is KtStringTemplateExpression) {
+          require(!versioned) { "Version-specific recording requires a SnapshotExpectation." }
           setExpression(rawExpression, value)
           continue
         }
@@ -197,4 +222,31 @@ internal object InlineCompilerSnapshots {
       else application.runWriteAction { Disposer.dispose(disposable) }
     }
   }
+
+  /** Stage all rewrites in a copy, then atomically replace the real source only on success. */
+  fun writeBatch(updates: List<InlineSnapshotUpdate>, version: String, versioned: Boolean) = synchronized(lock) {
+    val file = updates.first().location.file.toAbsolutePath().normalize()
+    val original = Files.readString(file)
+    val previous = histories[file]
+    check(previous == null || previous.current == original) { "Source changed outside snapshot recording: $file." }
+    val stage = Files.createTempFile(file.parent, ".knapshots-batch-", ".kt")
+    val stageKey = stage.toAbsolutePath().normalize()
+    try {
+      Files.copy(file, stage, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES)
+      if (previous != null) histories[stageKey] = SourceHistory(previous.current, previous.versions.toMutableSet(), previous.rewrites.toMutableList())
+      for (update in updates) {
+        val captures = update.values.mapKeys { CompilerSnapshotKind(it.key) }
+        write(stage, update.location.line, captures, version, versioned, update.expectedSource,
+          compiledSourceLine = true, assertionName = update.assertionName,
+          argumentNames = captures.keys.associateWith { it.name })
+      }
+      check(Files.readString(file) == original) { "Source changed while recording: $file." }
+      Files.move(stage, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+      histories[file] = checkNotNull(histories[stageKey])
+    } finally {
+      histories.remove(stageKey)
+      Files.deleteIfExists(stage)
+    }
+  }
+
 }

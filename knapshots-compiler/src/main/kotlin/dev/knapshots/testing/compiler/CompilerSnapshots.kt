@@ -53,7 +53,7 @@ public fun assertCompilerSnapshots(
 }
 
 /** Explicit recording is file-backed; normal test runs never change snapshots. */
-public enum class SnapshotRecording { NONE, MISSING, FAILED, ALL }
+public typealias SnapshotRecording = dev.knapshots.testing.snapshot.SnapshotRecording
 
 /** Requests a phase whose initial inline expectation will be recorded. */
 public fun snapshot(): SnapshotExpectation = SnapshotExpectation("", missing = true)
@@ -67,12 +67,8 @@ public fun shouldRecordSnapshot(
 ): Boolean {
   val differs = expectation.missing || compareSnapshot(actual.trimEnd('\n', '\r'),
     expectation.forVersion(compilerVersion).trimIndent().trimEnd('\n', '\r'), textSnapshotting) != null
-  return when (recording) {
-    SnapshotRecording.NONE -> false
-    SnapshotRecording.MISSING -> expectation.missing || (recordVersion && compilerVersion !in expectation.versions)
-    SnapshotRecording.FAILED -> differs
-    SnapshotRecording.ALL -> true
-  }
+  return dev.knapshots.testing.snapshot.shouldRecordSnapshot(recording, expectation.missing, differs,
+    versionMissing = recordVersion && compilerVersion !in expectation.versions)
 }
 
 public fun assertCompilerSnapshotFiles(

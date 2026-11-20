@@ -41,13 +41,62 @@ class CompilerDiagnosticRenderingTest {
     assertFailsWith<AssertionError> { assertCompiler(source, version, host, diagnostics = SnapshotExpectation("")) }
   }
 
+  @Test fun `diagnostic block records and compares a compiler error`(@TempDir directory: Path) {
+    val file = directory.resolve("Test.kt")
+    Files.writeString(file, "fun test() {\n  diagnostics { snapshot() }\n}\n")
+    val source = "val count: Int = \"hello\""
+    val host = EmbeddedCompilerHost()
+    val version = KotlinCompilerVersion.VERSION
+    val failure = assertFailsWith<AssertionError> {
+      assertCompiler(source, version, host, record = SnapshotRecording.MISSING) {
+        fails()
+        diagnostics { snapshot(location = InlineSnapshotLocation(file, 2)) }
+      }
+    }
+    assertContains(failure.message.orEmpty(), "Recorded diagnostics")
+    assertContains(Files.readString(file), "snapshot(")
+    assertContains(Files.readString(file), "error:")
+    val result = host.compile(CompilerRequest(listOf(CompilerSource("Main.kt", source)), version, emptySet()))
+    val output = renderCompilerDiagnostics(listOf(CompilerSource("Main.kt", source)), result.diagnostics)
+    assertCompiler(source, version, host) { fails(); diagnostics { snapshot(output) } }
+    assertCompiler(source, version, host) { fails(); diagnostics { snapshot(SnapshotExpectation("wrong", versions = mapOf(version to output))) } }
+    assertFailsWith<AssertionError> { assertCompiler(source, version, host) { succeeds(); diagnostics { snapshot(output) } } }
+  }
+
+  @Test fun `diagnostics shorthand records an explicit block`(@TempDir directory: Path) {
+    val file = directory.resolve("Short.kt")
+    Files.writeString(file, "fun test() {\n  diagnostics()\n}\n")
+    val error = assertFailsWith<AssertionError> {
+      assertCompiler("val count: Int = \"hello\"", KotlinCompilerVersion.VERSION, EmbeddedCompilerHost(), record = SnapshotRecording.MISSING) {
+        fails(); diagnostics(InlineSnapshotLocation(file, 2))
+      }
+    }
+    assertContains(error.message.orEmpty(), "Recorded diagnostics")
+    assertContains(Files.readString(file), "diagnostics { snapshot(")
+  }
+
+  @Test fun `diagnostic block records a compiler version override`(@TempDir directory: Path) {
+    val file = directory.resolve("Versioned.kt")
+    Files.writeString(file, "fun test() {\n  diagnostics { snapshot(SnapshotExpectation(\"shared\")) }\n}\n")
+    val host = CompilerHost { CompilerResult(false, listOf(CompilerDiagnostic(CompilerDiagnosticSeverity.ERROR, "invalid", "Main.kt:1", 1))) }
+    assertFailsWith<AssertionError> {
+      assertCompiler("bad", "2.4.21", host, record = SnapshotRecording.ALL, recordVersion = true) {
+        fails(); diagnostics { snapshot(SnapshotExpectation("shared"), location = InlineSnapshotLocation(file, 2)) }
+      }
+    }
+    val result = Files.readString(file)
+    assertContains(result, "versions = mapOf(\"2.4.21\" to")
+    assertContains(result, "error: invalid")
+    assertContains(result, "\"shared\"")
+  }
+
   @Test fun `line expectations refer to the primary source`() {
-    val compiler = CompilerHost { CompilerResult(false, listOf(CompilerDiagnostic(CompilerDiagnosticSeverity.ERROR, "bad", "Other.kt:3"))) }
+    val compiler = CompilerHost { CompilerResult(false, listOf(CompilerDiagnostic(CompilerDiagnosticSeverity.ERROR, "bad", "Other.kt:3", 9))) }
     val sources = listOf(CompilerSource("Main.kt", "first"), CompilerSource("Other.kt", "second"))
     assertFailsWith<AssertionError> {
       assertCompiler(sources, "test", compiler) { fails(); diagnostics { error("bad", line = 3) } }
     }
-    assertCompiler(sources, "test", compiler) { fails(); diagnostics { error("bad", location = "Other.kt:3") } }
+    assertCompiler(sources, "test", compiler) { fails(); diagnostics { error("bad", file = "Other.kt", line = 3, column = 9) } }
   }
 
   @Test fun `empty diagnostics snapshot checks clean compilation`() {
