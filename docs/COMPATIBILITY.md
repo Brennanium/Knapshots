@@ -4,10 +4,10 @@ The intended Gradle entry points select toolchains per invocation:
 
 ```shell
 ./gradlew editorCompatibility --ide-version 2026.2.2.8
-./gradlew compilerCompatibility --kotlin-version 2.4.21 --platform jvm,native
+./gradlew compilerCompatibility --kotlin-version 2.4.20,2.4.21,'2.5.0-dev*' --platform jvm,native
 ```
 
-These tasks are experimental and currently require project-provided drivers. Compiler selectors accept dev families such as `2.5.0-dev*`, reporting the concrete version selected. IDE selectors accept a full version or build and `latest-stable`.
+These tasks are experimental and currently require project-provided drivers. Compiler selectors accept comma-separated lists and repeated `--kotlin-version` options, including dev families such as `2.5.0-dev*`. Quote wildcard selectors to prevent shell expansion. The report records the concrete version selected; duplicate resolved versions run once. IDE selectors accept a full version or build and `latest-stable`.
 
 Compiler and editor compatibility are independent dimensions. Compiler compatibility invokes the configured project driver for each selected Kotlin version and reports its result. The driver owns the choice and reporting of JVM, Native, and consumer tests. Editor compatibility resolves an Android Studio release, verifies its official download checksum, and invokes the configured editor driver. Its report records the actual IDE build; when KEFS discovery is enabled it also records the IDE compiler version. A local IDE override must match the selected build.
 

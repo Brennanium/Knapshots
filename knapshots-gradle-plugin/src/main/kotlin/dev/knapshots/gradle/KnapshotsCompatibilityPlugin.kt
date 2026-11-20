@@ -135,6 +135,12 @@ public class KnapshotsCompatibilityPlugin : Plugin<Project> {
   }
 }
 
+internal fun splitKotlinVersionSelectors(values: List<String>): List<String> = values.flatMap { value ->
+  value.split(',').map { selector ->
+    selector.trim().also { require(it.isNotEmpty()) { "Empty Kotlin version selector in: $value" } }
+  }
+}
+
 @DisableCachingByDefault(because = "Compatibility drivers execute external regression suites")
 public abstract class CompilerCompatibilityTask : DefaultTask() {
   init { outputs.upToDateWhen { false } }
@@ -157,8 +163,8 @@ public abstract class CompilerCompatibilityTask : DefaultTask() {
     platforms.set(selected)
   }
 
-  @Option(option = "kotlin-version", description = "Kotlin version or dev-family selector; may be repeated")
-  public fun kotlinVersion(values: List<String>) { kotlinVersions.addAll(values) }
+  @Option(option = "kotlin-version", description = "Comma-separated Kotlin versions or dev-family selectors; may be repeated")
+  public fun kotlinVersion(values: List<String>) { kotlinVersions.addAll(splitKotlinVersionSelectors(values)) }
 
   @TaskAction
   public fun runCompatibility() {
