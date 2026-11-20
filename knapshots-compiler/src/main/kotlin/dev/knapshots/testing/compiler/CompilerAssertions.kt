@@ -1,5 +1,6 @@
 package dev.knapshots.testing.compiler
 
+import dev.knapshots.testing.snapshot.trimSnapshotIndent
 import dev.knapshots.testing.snapshot.compareSnapshot
 import dev.knapshots.testing.snapshot.textSnapshotting
 
@@ -224,7 +225,7 @@ public class CompilerExpectations internal constructor(
       } else if (expected.missing) {
         failures += "Missing ${kind.name} snapshot; enable recording to insert it."
       } else {
-        val difference = compareSnapshot(actual.trimEnd('\n', '\r'), expected.forVersion(compilerVersion).trimIndent().trimEnd('\n', '\r'), textSnapshotting)
+        val difference = compareSnapshot(actual.trimEnd('\n', '\r'), trimSnapshotIndent(expected.forVersion(compilerVersion)).trimEnd('\n', '\r'), textSnapshotting)
         if (difference != null) failures += "${kind.name} snapshot for Kotlin $compilerVersion differs:\nExpected:\n${difference.expected}\nActual:\n${difference.actual}"
       }
     }
@@ -236,7 +237,7 @@ public class CompilerExpectations internal constructor(
       } else if (expectation.missing) {
         failures += "Missing diagnostic snapshot; enable recording to insert it."
       } else {
-        val difference = compareSnapshot(actual, expectation.forVersion(compilerVersion).trimIndent().trimEnd('\n', '\r'), textSnapshotting)
+        val difference = compareSnapshot(actual, trimSnapshotIndent(expectation.forVersion(compilerVersion)).trimEnd('\n', '\r'), textSnapshotting)
         if (difference != null) failures += "Diagnostic snapshot differs:\nExpected:\n${difference.expected}\nActual:\n${difference.actual}"
       }
     }
@@ -404,7 +405,7 @@ public fun assertCompiler(
   if (diagnostics != null) {
     check(!diagnostics.missing) { "Missing diagnostic snapshot; enable recording to insert it." }
     val difference = compareSnapshot(checkNotNull(diagnosticOutput).trimEnd('\n', '\r'),
-      diagnostics.forVersion(compilerVersion).trimIndent().trimEnd('\n', '\r'), textSnapshotting)
+      trimSnapshotIndent(diagnostics.forVersion(compilerVersion)).trimEnd('\n', '\r'), textSnapshotting)
     if (difference != null) throw AssertionError("Diagnostic snapshot differs:\nExpected:\n${difference.expected}\nActual:\n${difference.actual}")
   }
   expected.forEach { (kind, expectation) ->

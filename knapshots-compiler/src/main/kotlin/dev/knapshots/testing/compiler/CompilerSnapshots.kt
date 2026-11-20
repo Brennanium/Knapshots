@@ -2,6 +2,7 @@ package dev.knapshots.testing.compiler
 
 import java.nio.file.Files
 import java.nio.file.Path
+import dev.knapshots.testing.snapshot.trimSnapshotIndent
 import dev.knapshots.testing.snapshot.compareSnapshot
 import dev.knapshots.testing.snapshot.textSnapshotting
 
@@ -40,7 +41,7 @@ public fun assertCompilerSnapshots(
     val captured = actual[kind] ?: error("The compiler did not provide the requested ${kind.name} snapshot.")
     val difference = compareSnapshot(
       captured.trimEnd('\n', '\r'),
-      expectation.forVersion(compilerVersion).trimIndent().trimEnd('\n', '\r'),
+      trimSnapshotIndent(expectation.forVersion(compilerVersion)).trimEnd('\n', '\r'),
       textSnapshotting,
     )
     if (difference != null) {
@@ -66,7 +67,7 @@ public fun shouldRecordSnapshot(
   recordVersion: Boolean,
 ): Boolean {
   val differs = expectation.missing || compareSnapshot(actual.trimEnd('\n', '\r'),
-    expectation.forVersion(compilerVersion).trimIndent().trimEnd('\n', '\r'), textSnapshotting) != null
+    trimSnapshotIndent(expectation.forVersion(compilerVersion)).trimEnd('\n', '\r'), textSnapshotting) != null
   return dev.knapshots.testing.snapshot.shouldRecordSnapshot(recording, expectation.missing, differs,
     versionMissing = recordVersion && compilerVersion !in expectation.versions)
 }

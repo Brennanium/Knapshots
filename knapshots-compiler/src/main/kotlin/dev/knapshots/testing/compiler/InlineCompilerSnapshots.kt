@@ -84,7 +84,7 @@ internal object InlineCompilerSnapshots {
         val clean = value.trimEnd('\n', '\r')
         // Kotlin raw strings still interpolate dollars. Regular escaped strings safely handle the
         // rare case where the compiler output itself contains a triple-quote delimiter.
-        if ("\"\"\"" in clean) return "\"" + clean.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$").replace("\n", "\\n").replace("\r", "\\r") + "\""
+        if ("\"\"\"" in clean || '\r' in clean) return "\"" + clean.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$").replace("\n", "\\n").replace("\r", "\\r") + "\""
         val content = clean.replace("$", "${'$'}{'${'$'}'}")
         val inner = indentation + "    "
         return "\"\"\"\n" + content.lines().joinToString("\n") { if (it.isEmpty()) "" else inner + it } + "\n" + inner + "\"\"\""
@@ -219,9 +219,11 @@ internal object InlineCompilerSnapshots {
           edits += Triple(lastArg.textRange.endOffset, lastArg.textRange.endOffset, separator)
         }
       }
+      val usesCrLf = "\r\n" in original && !Regex("(?<!\r)\n").containsMatchIn(original)
       var updated = original
       edits.sortedByDescending { it.first }.forEach { (start, end, replacement) ->
-        updated = updated.replaceRange(start, end, replacement)
+        val formatted = if (usesCrLf) replacement.replace("\n", "\r\n") else replacement
+        updated = updated.replaceRange(start, end, formatted)
       }
       // Don't overwrite edits made by the developer while compilation was in progress.
       check(Files.readString(file) == original) { "Source changed while recording: $file." }

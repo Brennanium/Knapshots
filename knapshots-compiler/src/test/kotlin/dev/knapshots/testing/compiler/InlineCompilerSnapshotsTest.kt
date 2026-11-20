@@ -268,4 +268,89 @@ class InlineCompilerSnapshotsTest {
     }
     assertEquals(original, Files.readString(file))
   }
+  @Test
+  fun `qualified nested calls record without changing comments or neighboring calls`(@TempDir directory: Path) {
+    val file = directory.resolve("Qualified.kt")
+    val original = """
+      fun first() {
+        // Keep this comment and the unrelated string: assertCompiler(source = "ignored")
+        run {
+          dev.knapshots.assertCompiler(
+            source = "first", // trailing comment
+            fir = snapshot(),
+          )
+        }
+      }
+      fun second() { assertCompiler(source = "untouched") }
+    """.trimIndent()
+    Files.writeString(file, original)
+    InlineCompilerSnapshots.write(file, 5, mapOf(CompilerSnapshotKind.FIR to "output"), "2.4.21", false)
+    val recorded = Files.readString(file)
+    assertContains(recorded, "// Keep this comment and the unrelated string")
+    assertContains(recorded, "source = \"first\", // trailing comment")
+    assertContains(recorded, "dev.knapshots.assertCompiler(")
+    assertContains(recorded, "fun second() { assertCompiler(source = \"untouched\") }")
+    assertContains(recorded, "fir = SnapshotExpectation(")
+  }
+
+  @Test
+  fun `recorded strings with delimiters dollars unicode and backslashes compile and round trip`(@TempDir directory: Path) {
+    val outputs = listOf(
+      "Café 漢字 😀 / dollar ${'$'}name / slash \\",
+      "triple delimiter: \"\"\" / dollar ${'$'}{value} / slash \\\\nsecond line",
+      "first line\n\nthird line",
+      "first line\r\nsecond line\rthird line",
+    )
+    outputs.forEachIndexed { index, output ->
+      val file = directory.resolve("Recorded$index.kt")
+      Files.writeString(file, """
+        var observed = ""
+        object Helper { fun fir(expected: String) { observed = expected } }
+        fun result(): String {
+          Helper.fir()
+          return observed
+        }
+      """.trimIndent())
+      recordInlineSnapshots(InlineSnapshotLocation(file, 4), "fir", mapOf("expected" to output),
+        org.jetbrains.kotlin.config.KotlinCompilerVersion.VERSION)
+      val result = EmbeddedCompilerHost().compile(CompilerRequest(
+        listOf(CompilerSource("Recorded$index.kt", Files.readString(file))),
+        org.jetbrains.kotlin.config.KotlinCompilerVersion.VERSION, emptySet(),
+      ))
+      assertTrue(result.succeeded, result.diagnostics.toString())
+      val observed = result.classLoader().loadClass("Recorded${index}Kt").getMethod("result").invoke(null) as String
+      assertEquals(output, dev.knapshots.testing.snapshot.trimSnapshotIndent(observed))
+    }
+  }
+
+  @Test
+  fun `a failed batch leaves every requested snapshot unchanged`(@TempDir directory: Path) {
+    val file = directory.resolve("Atomic.kt")
+    val source = "fun test() {\n  fir()\n  ir(dynamicExpectation)\n}\n"
+    Files.writeString(file, source)
+    assertFailsWith<IllegalStateException> {
+      recordInlineSnapshotBatch(listOf(
+        InlineSnapshotUpdate(InlineSnapshotLocation(file, 2), "fir", mapOf("expected" to "new FIR"), source),
+        InlineSnapshotUpdate(InlineSnapshotLocation(file, 3), "ir", mapOf("expected" to "new IR"), source),
+      ), "2.4.21")
+    }
+    assertEquals(source, Files.readString(file))
+  }
+
+  @Test fun `recording preserves CRLF source file line endings`(@TempDir directory: Path) {
+    val file = directory.resolve("Windows.kt")
+    val source = "fun test() {\r\n  fir()\r\n}\r\n"
+    Files.writeString(file, source)
+    recordInlineSnapshots(InlineSnapshotLocation(file, 2), "fir", mapOf("expected" to "first\nsecond"), "2.4.21")
+    val recorded = Files.readString(file)
+    assertEquals(false, Regex("(?<!\r)\n").containsMatchIn(recorded), recorded)
+    assertContains(recorded, "first")
+    assertContains(recorded, "second")
+    val compiled = EmbeddedCompilerHost().compile(CompilerRequest(
+      listOf(CompilerSource("Windows.kt", "fun fir(expected: String) {}\r\n" + recorded)),
+      org.jetbrains.kotlin.config.KotlinCompilerVersion.VERSION, emptySet(),
+    ))
+    assertTrue(compiled.succeeded, compiled.diagnostics.toString())
+  }
+
 }

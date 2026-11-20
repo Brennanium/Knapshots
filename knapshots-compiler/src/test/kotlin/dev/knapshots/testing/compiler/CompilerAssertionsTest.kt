@@ -266,4 +266,13 @@ class CompilerAssertionsTest {
     assertFailsWith<AssertionError> { assertCompiler("valid", "2.4.21", CompilerHost { CompilerResult(succeeded = true) }) { fails() } }
     assertFailsWith<AssertionError> { assertCompiler("valid", "2.4.21", CompilerHost { CompilerResult(true) }, record = SnapshotRecording.NONE) }
   }
+  @Test fun `snapshot comparison preserves carriage returns`() {
+    val actual = "first\r\nsecond\rthird"
+    val host = CompilerHost { CompilerResult(true, captures = mapOf(CompilerSnapshotKind.FIR to actual)) }
+    assertCompiler("source", "2.4.21", host, fir = SnapshotExpectation(actual))
+    assertFailsWith<AssertionError> {
+      assertCompiler("source", "2.4.21", host, fir = SnapshotExpectation("first\nsecond\nthird"))
+    }
+  }
+
 }

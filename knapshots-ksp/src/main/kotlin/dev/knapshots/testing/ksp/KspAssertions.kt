@@ -12,6 +12,7 @@ import dev.knapshots.testing.compiler.SnapshotRecording
 import dev.knapshots.testing.compiler.discoverInlineSnapshotLocation
 import dev.knapshots.testing.compiler.recordInlineSnapshots
 import dev.knapshots.testing.compiler.shouldRecordSnapshot
+import dev.knapshots.testing.snapshot.trimSnapshotIndent
 import dev.knapshots.testing.snapshot.compareSnapshot
 import dev.knapshots.testing.snapshot.textSnapshotting
 import java.nio.file.Files
@@ -193,11 +194,11 @@ public fun assertKsp(
   if (autoDiagnostics) updates["__diagnosticsBlock"] = checkNotNull(renderedDiagnostics)
   val generatedExpectation = if (expectations.hasGenerated) expectations.expectedGenerated ?: dev.knapshots.testing.compiler.snapshot() else null
   val generatedDifference = if (generatedExpectation != null && !generatedExpectation.missing)
-    compareSnapshot(actual, generatedExpectation.forVersion(compilerVersion).trimIndent().trimEnd('\n', '\r'), textSnapshotting) else null
+    compareSnapshot(actual, trimSnapshotIndent(generatedExpectation.forVersion(compilerVersion)).trimEnd('\n', '\r'), textSnapshotting) else null
   val recordGenerated = generatedExpectation != null && shouldRecordSnapshot(generatedExpectation, actual, compilerVersion, record, recordVersion)
   val dslExpectation = if (expectations.hasDiagnosticSnapshot) expectations.expectedSnapshot ?: dev.knapshots.testing.compiler.snapshot() else null
   val dslDifference = if (dslExpectation != null && !dslExpectation.missing)
-    compareSnapshot(checkNotNull(renderedDiagnostics), dslExpectation.forVersion(compilerVersion).trimIndent().trimEnd('\n', '\r'), textSnapshotting) else null
+    compareSnapshot(checkNotNull(renderedDiagnostics), trimSnapshotIndent(dslExpectation.forVersion(compilerVersion)).trimEnd('\n', '\r'), textSnapshotting) else null
   val recordDsl = dslExpectation != null && shouldRecordSnapshot(dslExpectation, checkNotNull(renderedDiagnostics), compilerVersion, record, recordVersion)
   val inlineUpdates = mutableListOf<InlineSnapshotUpdate>()
   if (updates.isNotEmpty()) inlineUpdates += InlineSnapshotUpdate(checkNotNull(target), "assertKsp", updates, original)
@@ -229,7 +230,7 @@ public fun assertKsp(
   }
   fun compare(name: String, expectation: SnapshotExpectation, output: String) {
     if (expectation.missing) throw AssertionError("Missing $name snapshot; enable recording to insert it.")
-    val difference = compareSnapshot(output.trimEnd('\n', '\r'), expectation.forVersion(compilerVersion).trimIndent().trimEnd('\n', '\r'), textSnapshotting)
+    val difference = compareSnapshot(output.trimEnd('\n', '\r'), trimSnapshotIndent(expectation.forVersion(compilerVersion)).trimEnd('\n', '\r'), textSnapshotting)
     if (difference != null) throw AssertionError("$name for Kotlin $compilerVersion differs.\nExpected:\n${difference.expected}\nActual:\n${difference.actual}")
   }
   if (generated != null) compare("Generated KSP source", generated, actual)

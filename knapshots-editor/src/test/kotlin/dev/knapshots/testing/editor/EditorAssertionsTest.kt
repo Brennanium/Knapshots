@@ -138,4 +138,10 @@ class EditorAssertionsTest {
     }
     assertFailsWith<IllegalStateException> { assertEditor(source) {} }
   }
+  @Test fun `diagnostic snapshots preserve carriage returns`() {
+    val editor = observations(listOf(EditorDiagnostic(DiagnosticSeverity.ERROR, "first\r\nsecond")))
+    assertEditor(editor) { diagnosticsSnapshot("ERROR: first\r\nsecond") }
+    assertFailsWith<AssertionError> { assertEditor(editor) { diagnosticsSnapshot("ERROR: first\nsecond") } }
+  }
+
 }

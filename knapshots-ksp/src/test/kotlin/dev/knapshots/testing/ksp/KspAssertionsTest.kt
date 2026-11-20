@@ -282,4 +282,13 @@ class KspAssertionsTest {
     assertEquals(original + "// developer edit\n", Files.readString(file))
   }
 
+  @Test fun `generated snapshots preserve carriage returns`() {
+    val generated = "first\r\nsecond\rthird"
+    val fake = KspHost { KspResult(true, mapOf("kotlin/Out.kt" to generated)) }
+    assertKsp("class Input", "2.4.21", fake, generated = SnapshotExpectation("// FILE: kotlin/Out.kt\n$generated"))
+    assertFailsWith<AssertionError> {
+      assertKsp("class Input", "2.4.21", fake, generated = SnapshotExpectation("// FILE: kotlin/Out.kt\nfirst\nsecond\nthird"))
+    }
+  }
+
 }

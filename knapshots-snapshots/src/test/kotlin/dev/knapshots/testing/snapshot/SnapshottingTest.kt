@@ -35,4 +35,9 @@ class SnapshottingTest {
     assertContains(failure.message.orEmpty(), "Expected:\nexpected")
     assertContains(failure.message.orEmpty(), "Actual:\nactual")
   }
+  @Test fun `snapshot indentation preserves embedded carriage returns and sentinel characters`() {
+    assertEquals("first\r\nsecond\rthird\u0000", trimSnapshotIndent("  first\r\n  second\rthird\u0000"))
+    assertEquals("alpha\nbeta", trimSnapshotIndent("  alpha\n  beta"))
+  }
+
 }

@@ -1,5 +1,7 @@
 package dev.knapshots.testing.editor
 
+import dev.knapshots.testing.snapshot.trimSnapshotIndent
+
 import dev.knapshots.testing.snapshot.SnapshotRecording
 import dev.knapshots.testing.snapshot.DiagnosticSource
 import dev.knapshots.testing.snapshot.SourceDiagnostic
@@ -75,7 +77,7 @@ public class EditorExpectations internal constructor(
     DiagnosticExpectations(expectedDiagnostics) { expected, location ->
       check(expectedDiagnostics.isEmpty() && !hasSourceDiagnosticSnapshot) { "Diagnostic snapshots and individual diagnostic expectations cannot be combined." }
       hasSourceDiagnosticSnapshot = true
-      expectedSourceDiagnosticSnapshot = expected?.trimIndent()?.trimEnd('\n', '\r')
+      expectedSourceDiagnosticSnapshot = expected?.let(::trimSnapshotIndent)?.trimEnd('\n', '\r')
       sourceSnapshotCall = "snapshot"
       if (dev.knapshots.testing.snapshot.mayRecordSnapshot(recording, expected == null)) sourceSnapshotLocation = location ?: discoverEditorSnapshotLocation()
     }.apply(block)
@@ -88,7 +90,7 @@ public class EditorExpectations internal constructor(
     check(expectedDiagnosticSnapshot == null && !hasSourceDiagnosticSnapshot && !hasDiagnosticBlock) {
       "Diagnostic snapshots and individual diagnostic expectations cannot be combined or repeated."
     }
-    expectedDiagnosticSnapshot = expected.trimIndent().trimEnd('\n', '\r')
+    expectedDiagnosticSnapshot = trimSnapshotIndent(expected).trimEnd('\n', '\r')
   }
 
   /** Compare diagnostics in source context; requires a source-hosted assertion. */
@@ -98,7 +100,7 @@ public class EditorExpectations internal constructor(
       "Diagnostic snapshots and individual diagnostic expectations cannot be combined or repeated."
     }
     hasSourceDiagnosticSnapshot = true
-    expectedSourceDiagnosticSnapshot = expected?.trimIndent()?.trimEnd('\n', '\r')
+    expectedSourceDiagnosticSnapshot = expected?.let(::trimSnapshotIndent)?.trimEnd('\n', '\r')
     if (dev.knapshots.testing.snapshot.mayRecordSnapshot(recording, expected == null)) sourceSnapshotLocation = location ?: discoverEditorSnapshotLocation()
   }
 

@@ -58,3 +58,11 @@ public val textSnapshotting: Snapshotting<String, String> = Snapshotting(
   diffing = Diffing { expected, actual -> if (expected == actual) null else "Text snapshots differ" },
   snapshot = { it },
 )
+
+/** Removes snapshot indentation without treating embedded carriage returns as line separators. */
+public fun trimSnapshotIndent(value: String): String {
+  if ('\r' !in value) return value.trimIndent()
+  var marker = "\u0000"
+  while (marker in value) marker += "\u0000"
+  return value.replace("\r", marker).trimIndent().replace(marker, "\r")
+}
