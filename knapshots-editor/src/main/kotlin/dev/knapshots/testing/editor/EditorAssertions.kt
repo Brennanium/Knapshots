@@ -29,6 +29,8 @@ public sealed interface ReferenceObservation {
 public interface EditorObservations {
   public fun diagnostics(): List<EditorDiagnostic>
   public fun reference(expression: String): ReferenceObservation
+  /** Product-prefixed build of the IDE that produced these observations, if known. */
+  public fun ideBuild(): String? = null
 }
 
 /**
@@ -42,7 +44,7 @@ public fun assertEditor(
   record: SnapshotRecording = configuredEditorRecording(),
   block: EditorExpectations.() -> Unit,
 ) {
-  EditorExpectations(checkDiagnostics, record).apply(block).verify(observations)
+  EditorExpectations(checkDiagnostics, record, observations.ideBuild()).apply(block).resolveVersions().prepareRecordingTarget().verify(observations)
 }
 
 private val diagnosticSnapshotting = textSnapshotting.pullback<List<EditorDiagnostic>> { diagnostics ->
@@ -54,7 +56,12 @@ private val diagnosticSnapshotting = textSnapshotting.pullback<List<EditorDiagno
 public class EditorExpectations internal constructor(
   private val checkDiagnostics: Boolean,
   private val recording: SnapshotRecording,
+  private val ideBuild: String? = null,
 ) {
+  private val versionBranches = linkedMapOf<String, EditorExpectations.() -> Unit>()
+  private var defaultBranch = false
+  private var isBranch = false
+  private var deferredSourceSnapshotLocation: (() -> EditorSnapshotLocation)? = null
   private val expectedDiagnostics = mutableListOf<ExpectedDiagnostic>()
   private val references = mutableListOf<ReferenceExpectation>()
   private var expectedDiagnosticSnapshot: String? = null
@@ -64,6 +71,48 @@ public class EditorExpectations internal constructor(
   private var sourceSnapshotCall: String = "sourceDiagnosticsSnapshot"
   private var hasDiagnosticBlock = false
 
+  /** Groups default expectations; equivalent to placing them at the assertion level. */
+  public fun default(block: EditorExpectations.() -> Unit) {
+    check(!isBranch && !defaultBranch) { "Only one default block is allowed." }
+    defaultBranch = true
+    block()
+  }
+
+  /** Overrides diagnostics or references for a product-prefixed IDE build. */
+  public fun versioned(selector: String, block: EditorExpectations.() -> Unit) {
+    check(!isBranch) { "Version blocks cannot be nested." }
+    check(selector !in versionBranches) { "Duplicate IDE build selector: $selector." }
+    versionBranches[selector] = block
+  }
+
+  internal fun resolveVersions(): EditorExpectations {
+    if (versionBranches.isEmpty()) return this
+    val actual = requireNotNull(ideBuild) { "The editor host did not provide an IDE build; versioned editor assertions require the actual build." }
+    val selected = selectEditorBuild(versionBranches.keys, actual) ?: return this
+    val branch = EditorExpectations(checkDiagnostics, recording, ideBuild).also { it.isBranch = true }.apply(versionBranches.getValue(selected))
+    if (branch.hasDiagnosticBlock || branch.expectedDiagnosticSnapshot != null || branch.hasSourceDiagnosticSnapshot) {
+      expectedDiagnostics.clear()
+      expectedDiagnostics.addAll(branch.expectedDiagnostics)
+      expectedDiagnosticSnapshot = branch.expectedDiagnosticSnapshot
+      expectedSourceDiagnosticSnapshot = branch.expectedSourceDiagnosticSnapshot
+      hasSourceDiagnosticSnapshot = branch.hasSourceDiagnosticSnapshot
+      sourceSnapshotLocation = branch.sourceSnapshotLocation
+      deferredSourceSnapshotLocation = branch.deferredSourceSnapshotLocation
+      sourceSnapshotCall = branch.sourceSnapshotCall
+      hasDiagnosticBlock = branch.hasDiagnosticBlock
+    }
+    branch.references.forEach { reference ->
+      references.removeAll { it.expression == reference.expression }
+      references.add(reference)
+    }
+    return this
+  }
+
+  internal fun prepareRecordingTarget(): EditorExpectations {
+    deferredSourceSnapshotLocation?.let { sourceSnapshotLocation = it() }
+    return this
+  }
+
   /** Record a diagnostic snapshot, expanding to a diagnostics block. */
   public fun diagnostics(location: EditorSnapshotLocation? = null) {
     diagnostics { snapshot(location = location) }
@@ -72,15 +121,26 @@ public class EditorExpectations internal constructor(
 
   public fun diagnostics(block: DiagnosticExpectations.() -> Unit) {
     check(checkDiagnostics) { "Diagnostic checking is disabled for this editor assertion." }
-    check(expectedDiagnosticSnapshot == null && !hasSourceDiagnosticSnapshot) { "Diagnostic snapshots and individual diagnostic expectations cannot be combined." }
+    check(expectedDiagnosticSnapshot == null && !hasSourceDiagnosticSnapshot && !hasDiagnosticBlock) { "Diagnostics can only be specified once." }
     hasDiagnosticBlock = true
-    DiagnosticExpectations(expectedDiagnostics) { expected, location ->
+    DiagnosticExpectations(expectedDiagnostics, ideBuild, { expected, location ->
       check(expectedDiagnostics.isEmpty() && !hasSourceDiagnosticSnapshot) { "Diagnostic snapshots and individual diagnostic expectations cannot be combined." }
       hasSourceDiagnosticSnapshot = true
       expectedSourceDiagnosticSnapshot = expected?.let(::trimSnapshotIndent)?.trimEnd('\n', '\r')
       sourceSnapshotCall = "snapshot"
-      if (dev.knapshots.testing.snapshot.mayRecordSnapshot(recording, expected == null)) sourceSnapshotLocation = location ?: discoverEditorSnapshotLocation()
-    }.apply(block)
+      if (dev.knapshots.testing.snapshot.mayRecordSnapshot(recording, expected == null)) {
+        val frames = Throwable().stackTrace
+        deferredSourceSnapshotLocation = { location ?: discoverEditorSnapshotLocation(frames) }
+      }
+    }, { entry ->
+      check(expectedDiagnostics.isEmpty() && !hasSourceDiagnosticSnapshot) { "Diagnostic snapshots and individual diagnostic expectations cannot be combined." }
+      hasSourceDiagnosticSnapshot = true
+      expectedSourceDiagnosticSnapshot = entry.expected?.let(::trimSnapshotIndent)?.trimEnd('\n', '\r')
+      sourceSnapshotCall = entry.call
+      if (dev.knapshots.testing.snapshot.mayRecordSnapshot(recording, entry.expected == null)) {
+        deferredSourceSnapshotLocation = { entry.location ?: discoverEditorSnapshotLocation(entry.frames) }
+      }
+    }).apply(block).finish()
     check(!hasSourceDiagnosticSnapshot || expectedDiagnostics.isEmpty()) { "Diagnostic snapshots and individual diagnostic expectations cannot be combined." }
   }
 
@@ -101,11 +161,15 @@ public class EditorExpectations internal constructor(
     }
     hasSourceDiagnosticSnapshot = true
     expectedSourceDiagnosticSnapshot = expected?.let(::trimSnapshotIndent)?.trimEnd('\n', '\r')
-    if (dev.knapshots.testing.snapshot.mayRecordSnapshot(recording, expected == null)) sourceSnapshotLocation = location ?: discoverEditorSnapshotLocation()
+    if (dev.knapshots.testing.snapshot.mayRecordSnapshot(recording, expected == null)) {
+      val frames = Throwable().stackTrace
+      deferredSourceSnapshotLocation = { location ?: discoverEditorSnapshotLocation(frames) }
+    }
   }
 
   public fun reference(expression: String): ReferenceExpectation {
     require(expression.isNotBlank()) { "A reference expression must not be blank." }
+    check(references.none { it.expression == expression }) { "Reference expectation already specified: $expression" }
     return ReferenceExpectation(expression).also(references::add)
   }
 
@@ -196,8 +260,19 @@ internal data class ExpectedDiagnostic(val severity: DiagnosticSeverity, val mes
 
 public class DiagnosticExpectations internal constructor(
   private val expected: MutableList<ExpectedDiagnostic>,
+  private val ideBuild: String?,
   private val recordSnapshot: (String?, EditorSnapshotLocation?) -> Unit,
+  private val recordVersioned: (EditorVersionedSnapshots.Entry) -> Unit,
 ) {
+  private var versions: EditorVersionedSnapshots? = null
+  public fun default(expected: String? = null, location: EditorSnapshotLocation? = null) {
+    (versions ?: EditorVersionedSnapshots().also { versions = it }).default(expected, location)
+  }
+  public fun versioned(selector: String, expected: String? = null, location: EditorSnapshotLocation? = null) {
+    (versions ?: EditorVersionedSnapshots().also { versions = it }).versioned(selector, expected, location)
+  }
+  internal fun finish() { versions?.let { recordVersioned(it.selected(ideBuild)) } }
+
   /** Compare or record all diagnostics rendered against the source. */
   public fun snapshot(expected: String? = null, location: EditorSnapshotLocation? = null) = recordSnapshot(expected, location)
   public fun error(messageContains: String, location: String? = null, file: String? = null, line: Int? = null, column: Int? = null) = expect(DiagnosticSeverity.ERROR, messageContains, location, file, line, column)

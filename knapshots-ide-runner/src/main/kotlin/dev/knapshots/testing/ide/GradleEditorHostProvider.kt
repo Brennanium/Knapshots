@@ -85,6 +85,7 @@ public class GradleEditorHostProvider : EditorHostProvider {
       timeout = Duration.ofMinutes(12), environment = mapOf("JAVA_HOME" to javaHome.toString()),
     )
     return RunnerEditorSourceHost(template, launcher,
+      ideBuild = installedIdeBuild(ide),
       temporaryParent = optional("temporaryParent")?.let { Files.createDirectories(Path.of(it)) },
       reportDirectory = optional("reportDirectory")?.let(Path::of),
       failureReportFiles = listOf(
@@ -108,3 +109,8 @@ internal fun editorGradleSettings(): String = """
     </component>
   </project>
 """.trimIndent()
+
+/** Read the actual selected IDE's product-prefixed build, not the project Kotlin version. */
+internal fun installedIdeBuild(ide: Path): String? = listOf(
+  ide.resolve("Contents/Resources/build.txt"), ide.resolve("build.txt"),
+).firstOrNull(Files::isRegularFile)?.let { Files.readString(it).trim().takeIf(String::isNotEmpty) }

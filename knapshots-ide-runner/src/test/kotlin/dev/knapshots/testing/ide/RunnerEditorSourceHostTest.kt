@@ -170,4 +170,14 @@ class RunnerEditorSourceHostTest {
     assertContains(failure.message.orEmpty(), "Indexing did not become ready")
     assertTrue(Files.list(directory).use { !it.findAny().isPresent })
   }
+  @Test fun `installed IDE build is read from selected installation`(@TempDir directory: Path) {
+    val resources = Files.createDirectories(directory.resolve("Contents/Resources"))
+    Files.writeString(resources.resolve("build.txt"), "AI-262.123.4\n")
+    assertEquals("AI-262.123.4", installedIdeBuild(directory))
+    val linux = Files.createDirectories(directory.resolve("linux"))
+    Files.writeString(linux.resolve("build.txt"), "IU-263.9\n")
+    assertEquals("IU-263.9", installedIdeBuild(linux))
+    assertEquals(null, installedIdeBuild(directory.resolve("absent")))
+  }
+
 }

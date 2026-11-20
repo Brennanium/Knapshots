@@ -136,7 +136,28 @@ Each top-level expectation is a default: `ir("...")` is equivalent to `default {
 
 With the JUnit integration and a project-configured host, a test can call `assertEditor(source)` without passing a host. Input-only assertions snapshot the IDE diagnostics; when using focused diagnostic checks, unexpected errors fail by default. Reference resolution and expected diagnostics can be asserted in the block. The Gradle integration can use the test task's runtime classpath and infer selected version information. It still needs enough project configuration to apply the target Gradle plugin, locate any required IDE plugin, and launch the compatible adapter.
 
-Editor diagnostic snapshots use the input-only, `diagnostics()`, and `diagnostics { snapshot(...) }` forms shown above. Recording uses an isolated worker process to keep the Kotlin compiler off the IDE classpath. The IDE supplies the locations and message text; version-specific editor snapshots remain future work.
+Editor diagnostic snapshots use the input-only, `diagnostics()`, and `diagnostics { snapshot(...) }` forms shown above. The IDE supplies the locations and message text.
+
+### Expectations for IDE builds
+
+Use the same `default` and `versioned` shape for editor diagnostics:
+
+```kotlin
+assertEditor(source) {
+  diagnostics {
+    default()
+    versioned("AI-262.*")
+  }
+}
+```
+
+An empty placeholder is recorded only when it is selected. A matching exact build takes precedence over a build-family selector; overlapping families fail rather than choosing one. An inactive empty placeholder is ignored. IDE selectors currently accept exact product-prefixed build identifiers such as `AI-262.10968.63.2622.16730706`, or families such as `AI-262.*` and `IU-263.*`. Comparison ranges and Android Studio release numbers such as `2026.2.2.8` are not currently selectors. `AI` identifies Android Studio, while IntelliJ editions use their own product codes; this prevents one IDE's build family from silently matching another.
+
+Top-level `default { ... }` groups default diagnostics and reference expectations. A matching `versioned("AI-262.*") { ... }` replaces diagnostics as a group and replaces references by expression, while retaining unspecified defaults. Duplicate default diagnostics or the same default reference fail. Only references needed by the selected build are sent to the IDE. A custom host must implement `ideBuild()` to provide the actual product-prefixed IDE build; versioned assertions fail clearly if it is unavailable. The standard Gradle host reads `build.txt` from the selected IDE installation, and the lightweight IntelliJ fixture reads the running IDE's build. This is the IDE build, not the Kotlin compiler version configured in the temporary project.
+
+### Why recording uses a worker
+
+Recording rewrites Kotlin test source using a Kotlin parser. The lightweight IDE fixture already runs with IDE and Kotlin-plugin classes on its classpath; loading the recorder's compiler classes into that same process can cause incompatible class versions to collide. Knapshots instead starts a small persistent Java subprocess with an isolated recorder classpath. The editor test sends it the source location and snapshot text; the worker rewrites the test and returns the result. It does not launch another IDE or run the editor assertion again. The worker starts only when recording is needed; ordinary comparisons do not use it.
 
 The [compatibility guide](COMPATIBILITY.md#editor-assertions-in-junit) describes the experimental Gradle settings and what is currently inferred. The adapter has not been published; a local archive or the existing checkout-based launcher is still needed. Other IDE plugin mechanisms require their own integration; enabling KEFS is not a requirement for compiler assertions.
 

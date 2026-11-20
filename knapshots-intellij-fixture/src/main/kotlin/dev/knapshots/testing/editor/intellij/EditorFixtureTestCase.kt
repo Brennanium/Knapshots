@@ -1,6 +1,7 @@
 package dev.knapshots.testing.editor.intellij
 
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
+import com.intellij.openapi.application.ApplicationInfo
 import dev.knapshots.testing.editor.EditorExpectations
 import dev.knapshots.testing.editor.EditorSourceHost
 
@@ -16,13 +17,16 @@ abstract class EditorFixtureTestCase : BasePlatformTestCase() {
     location: dev.knapshots.testing.editor.EditorSnapshotLocation? = null,
     block: EditorExpectations.() -> Unit = {},
   ) {
-    val host = EditorSourceHost { request ->
-      val main = request.sources.first()
-      request.sources.drop(1).forEach { sourceFile ->
-        myFixture.addFileToProject(sourceFile.fileName, sourceFile.text)
+    val host = object : EditorSourceHost {
+      override fun ideBuild(): String = ApplicationInfo.getInstance().build.asString()
+      override fun open(request: dev.knapshots.testing.editor.EditorRequest): dev.knapshots.testing.editor.EditorObservations {
+        val main = request.sources.first()
+        request.sources.drop(1).forEach { sourceFile ->
+          myFixture.addFileToProject(sourceFile.fileName, sourceFile.text)
+        }
+        myFixture.configureByText(main.fileName, main.text)
+        return IntellijEditorObservations(myFixture, ignoreMissingDependency)
       }
-      myFixture.configureByText(main.fileName, main.text)
-      IntellijEditorObservations(myFixture, ignoreMissingDependency)
     }
     dev.knapshots.testing.editor.assertEditor(source = source, host = host, fileName = fileName,
       additionalSources = additionalSources.map { (name, text) -> dev.knapshots.testing.editor.EditorSource(name, text) }, record = record, location = location, block = block)

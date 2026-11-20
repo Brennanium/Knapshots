@@ -16,14 +16,14 @@ public fun configuredEditorRecording(): SnapshotRecording {
   catch (_: IllegalArgumentException) { error("Invalid editor snapshot recording mode: $mode") }
 }
 
-internal fun discoverEditorSnapshotLocation(): EditorSnapshotLocation {
+internal fun discoverEditorSnapshotLocation(frames: Array<StackTraceElement> = Throwable().stackTrace): EditorSnapshotLocation {
   val sourceRoot = Path.of(System.getProperty("user.dir"), "src")
   val roots = if (Files.isDirectory(sourceRoot)) Files.list(sourceRoot).use { directories ->
     directories.filter { Files.isDirectory(it) && (it.fileName.toString() == "test" || it.fileName.toString().endsWith("Test")) }
       .flatMap { directory -> java.util.stream.Stream.of(directory.resolve("kotlin"), directory.resolve("java")) }
       .toList()
   } else emptyList()
-  val caller = Throwable().stackTrace.firstNotNullOfOrNull { frame ->
+  val caller = frames.firstNotNullOfOrNull { frame ->
     if (frame.lineNumber <= 0 || frame.fileName == null || frame.className == EditorExpectations::class.java.name) return@firstNotNullOfOrNull null
     val packagePath = frame.className.substringBeforeLast('.', "").replace('.', '/')
     roots.map { it.resolve(packagePath).resolve(frame.fileName) }.firstOrNull(Files::isRegularFile)

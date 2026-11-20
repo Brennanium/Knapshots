@@ -38,4 +38,11 @@ class EditorFixtureTest : EditorFixtureTestCase() {
       reference("this.missing").isUnresolved()
     }
   }
+  fun testVersionedExpectationsUseActualIdeBuild() {
+    val build = com.intellij.openapi.application.ApplicationInfo.getInstance().build.asString()
+    assertEditor(source = "plain text", fileName = "Example.txt") {
+      diagnostics { default("should not be selected"); versioned(build, "") }
+    }
+  }
+
 }

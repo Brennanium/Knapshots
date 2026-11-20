@@ -1,6 +1,7 @@
 package dev.knapshots.testing.editor.intellij
 
 import com.intellij.lang.annotation.HighlightSeverity
+import com.intellij.openapi.application.ApplicationInfo
 import com.intellij.testFramework.fixtures.CodeInsightTestFixture
 import dev.knapshots.testing.editor.DiagnosticSeverity
 import dev.knapshots.testing.editor.EditorDiagnostic
@@ -13,6 +14,8 @@ public class IntellijEditorObservations(
   // Opt in only for the light fixture's known stub-classpath diagnostic.
   private val ignoreMissingDependency: Boolean = false,
 ) : EditorObservations {
+  override fun ideBuild(): String = ApplicationInfo.getInstance().build.asString()
+
   override fun diagnostics(): List<EditorDiagnostic> = fixture.doHighlighting()
     .filterNot { ignoreMissingDependency && it.description?.contains("MISSING_DEPENDENCY") == true }
     // Syntax-coloring highlights have no diagnostic message. Never hide errors or warnings.

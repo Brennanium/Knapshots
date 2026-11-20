@@ -56,6 +56,7 @@ public class RunnerEditorSourceHost(
   private val reportDirectory: Path? = null,
   /** Extra files relative to the temporary inspection directory to collect on failure. */
   private val failureReportFiles: List<String> = emptyList(),
+  private val ideBuild: String? = null,
 ) : EditorSourceHost {
   init {
     failureReportFiles.forEach { path ->
@@ -65,6 +66,8 @@ public class RunnerEditorSourceHost(
       }
     }
   }
+  override fun ideBuild(): String? = ideBuild
+
   override fun open(request: EditorRequest): EditorObservations {
     val parent = temporaryParent ?: Path.of(System.getProperty("java.io.tmpdir"))
     Files.createDirectories(parent)
@@ -93,7 +96,7 @@ public class RunnerEditorSourceHost(
         is EditorInspectionResponse.Failed -> throw EditorInspectionException(response.reason, project.directory)
         is EditorInspectionResponse.Completed -> {
           returnedSession = true
-          return RecordedEditorObservations(response) { assertionsSucceeded ->
+          return RecordedEditorObservations(response, ideBuild) { assertionsSucceeded ->
             try {
               collectReport(temporaryDirectory, assertionsSucceeded)
             } finally {
@@ -142,6 +145,7 @@ public class RunnerEditorSourceHost(
 
 private class RecordedEditorObservations(
   private val response: EditorInspectionResponse.Completed,
+  private val ideBuild: String?,
   private val onComplete: (successful: Boolean) -> Unit,
 ) : EditorObservationSession {
   private var completed: Boolean = false
@@ -151,6 +155,8 @@ private class RecordedEditorObservations(
     completed = true
     onComplete(successful)
   }
+
+  override fun ideBuild(): String? = ideBuild
 
   override fun diagnostics(): List<EditorDiagnostic> = response.diagnostics
     ?: error("The IDE did not provide diagnostics for this editor inspection.")
