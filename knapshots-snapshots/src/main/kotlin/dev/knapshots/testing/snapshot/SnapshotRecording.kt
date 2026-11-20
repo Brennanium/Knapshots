@@ -15,3 +15,11 @@ public fun shouldRecordSnapshot(
   SnapshotRecording.FAILED -> differs
   SnapshotRecording.ALL -> true
 }
+
+/** Whether a recording mode could write this expectation; useful for capturing its source safely. */
+public fun mayRecordSnapshot(recording: SnapshotRecording, missing: Boolean, versionMissing: Boolean = false): Boolean =
+  when (recording) {
+    SnapshotRecording.NONE -> false
+    SnapshotRecording.MISSING -> missing || versionMissing
+    SnapshotRecording.FAILED, SnapshotRecording.ALL -> true
+  }

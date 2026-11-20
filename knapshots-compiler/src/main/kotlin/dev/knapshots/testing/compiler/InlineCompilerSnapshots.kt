@@ -93,6 +93,29 @@ internal object InlineCompilerSnapshots {
         require(expression is KtStringTemplateExpression) { "Snapshot must be a literal string, got ${expression.text}." }
         edits += Triple(expression.textRange.startOffset, expression.textRange.endOffset, literal(value))
       }
+      val implicitBlocks = values.entries.filter { argumentNames[it.key] in setOf("__generatedBlock", "__firBlock", "__irBlock", "__diagnosticsBlock") }
+      if (implicitBlocks.isNotEmpty()) {
+        require(!versioned) { "Record shared snapshots before version-specific output." }
+        val order = listOf("__generatedBlock", "__firBlock", "__irBlock", "__diagnosticsBlock")
+        val ordered = implicitBlocks.sortedBy { order.indexOf(argumentNames[it.key]) }
+        val statements = ordered.map { entry ->
+          when (argumentNames[entry.key]) {
+            "__generatedBlock" -> "generated(${literal(entry.value)})"
+            "__firBlock" -> "fir(${literal(entry.value)})"
+            "__irBlock" -> "ir(${literal(entry.value)})"
+            else -> "diagnostics { snapshot(${literal(entry.value)}) }"
+          }
+        }
+        val lambda = call.lambdaArguments.singleOrNull()?.getLambdaExpression()
+        if (lambda == null) {
+          require(call.lambdaArguments.isEmpty()) { "Ambiguous assertion lambda." }
+          edits += Triple(call.textRange.endOffset, call.textRange.endOffset, " { " + statements.joinToString("; ") + " }")
+        } else {
+          val close = lambda.textRange.endOffset - 1
+          require(original[close] == '}') { "Assertion block has no closing brace." }
+          edits += Triple(close, close, "\n" + statements.joinToString("\n") { "${indentation}  $it" } + "\n$indentation")
+        }
+      }
       if (assertionName == "diagnostics") {
         require(!versioned && values.size == 1 && args.arguments.size <= 1 && call.lambdaArguments.isEmpty()) {
           "Record a shared diagnostics() snapshot before version-specific output."
@@ -106,6 +129,7 @@ internal object InlineCompilerSnapshots {
         edits += Triple(call.textRange.startOffset, call.textRange.endOffset, "diagnostics { snapshot(${literal(value)}$location) }")
       } else for ((kind, value) in values) {
         val name = argumentNames[kind] ?: error("Unsupported inline snapshot kind: ${kind.name}.")
+        if (name in setOf("__generatedBlock", "__firBlock", "__irBlock", "__diagnosticsBlock")) continue
         val named = args.arguments.filter { it.getArgumentName()?.asName?.asString() == name }
         val positional = args.arguments.filter { it.getArgumentName() == null }
         val special = assertionName in setOf("sourceDiagnosticsSnapshot", "snapshot", "generated", "fir", "ir", "bytecode") && name == "expected"

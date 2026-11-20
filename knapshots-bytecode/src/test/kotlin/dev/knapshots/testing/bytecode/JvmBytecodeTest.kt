@@ -7,6 +7,7 @@ import dev.knapshots.testing.compiler.CompilerSource
 import dev.knapshots.testing.compiler.CompilerHost
 import dev.knapshots.testing.compiler.CompilerResult
 import dev.knapshots.testing.compiler.CompilerSnapshotKind
+import dev.knapshots.testing.compiler.withDefaultSnapshotKinds
 import dev.knapshots.testing.compiler.assertCompiler
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
@@ -40,6 +41,16 @@ class JvmBytecodeTest {
       fir("fir")
       bytecode(renderJvmBytecode(bytes))
     }
+  }
+
+  @Test fun `bytecode remains opt in while preserving underlying default phases`() {
+    val base = object : CompilerHost {
+      override fun defaultSnapshotKinds() = setOf(CompilerSnapshotKind.FIR)
+      override fun compile(request: CompilerRequest) = CompilerResult(true)
+    }
+    val host = base.withJvmBytecodeSnapshot("example.Person")
+    assertEquals(setOf(CompilerSnapshotKind.FIR), host.defaultSnapshotKinds())
+    assertFailsWith<IllegalArgumentException> { base.withDefaultSnapshotKinds(setOf(CompilerSnapshotKind.BYTECODE)) }
   }
 
   @Test fun `captures bytecode from an actual compilation`() {

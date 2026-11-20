@@ -32,6 +32,34 @@ class FixturePluginIntegrationTest {
     } },
   )
 
+  @Test fun `input only records the hosts available compiler output`(@TempDir directory: Path) {
+    val file = directory.resolve("InputOnly.kt")
+    Files.writeString(file, "fun test() {\n  assertCompiler(\"source\")\n}\n")
+    val automatic = object : CompilerHost {
+      override fun defaultSnapshotKinds() = setOf(CompilerSnapshotKind.FIR, CompilerSnapshotKind.IR)
+      override fun compile(request: CompilerRequest) = host.compile(request)
+    }
+    assertFailsWith<AssertionError> {
+      assertCompiler(source, version, automatic, record = SnapshotRecording.MISSING, location = InlineSnapshotLocation(file, 2))
+    }
+    val recorded = Files.readString(file)
+    assertContains(recorded, "fir(")
+    assertContains(recorded, "FIR classes")
+    assertContains(recorded, "ir(")
+    assertContains(recorded, "IR replacements")
+    assertContains(recorded, "diagnostics { snapshot(")
+    val stubs = "class Diagnostics { fun snapshot(value: String) {} }\n" +
+      "class Expectations { fun fir(value: String) {} ; fun ir(value: String) {} ; fun diagnostics(block: Diagnostics.() -> Unit) {} }\n" +
+      "fun assertCompiler(source: String, block: Expectations.() -> Unit) {}\n"
+    val rewritten = EmbeddedCompilerHost().compile(CompilerRequest(listOf(CompilerSource("Rewritten.kt", stubs + recorded)), version, emptySet()))
+    assertTrue(rewritten.succeeded, rewritten.diagnostics.toString())
+    assertCompiler(source, version, automatic, record = SnapshotRecording.NONE) {
+      fir("FIR classes\nfixture.AddMember\nfixture.Example")
+      ir("IR replacements: 1\nIR generated members: 1")
+      diagnostics { snapshot("") }
+    }
+  }
+
   @Test fun `captures real FIR and IR and executes transformed bytecode`() {
     val result = host.compile(CompilerRequest(listOf(CompilerSource("Example.kt", source)), version,
       setOf(CompilerSnapshotKind.FIR, CompilerSnapshotKind.IR)))

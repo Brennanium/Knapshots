@@ -1,6 +1,8 @@
 package dev.knapshots.testing.bytecode
 
 import dev.knapshots.testing.compiler.CompilerHost
+import dev.knapshots.testing.compiler.CompilerRequest
+import dev.knapshots.testing.compiler.CompilerResult
 import dev.knapshots.testing.compiler.CompilerSnapshotKind
 import dev.knapshots.testing.snapshot.Snapshotting
 import dev.knapshots.testing.snapshot.textSnapshotting
@@ -84,14 +86,16 @@ public fun CompilerHost.withJvmBytecodeSnapshot(
 ): CompilerHost {
   require(className.split('.').all { part -> part.isNotEmpty() && part.none { it == '/' || it == '\\' } }) { "A JVM class name is required." }
   require(kind != CompilerSnapshotKind.FIR && kind != CompilerSnapshotKind.IR) { "Bytecode must use a distinct snapshot kind." }
-  return CompilerHost { request ->
-    if (kind !in request.captures) {
-      compile(request)
-    } else {
-      val result = compile(request.copy(captures = request.captures - kind))
+  val underlying = this
+  return object : CompilerHost {
+    override fun defaultSnapshotKinds(): Set<CompilerSnapshotKind> = underlying.defaultSnapshotKinds()
+
+    override fun compile(request: CompilerRequest): CompilerResult {
+      if (kind !in request.captures) return underlying.compile(request)
+      val result = underlying.compile(request.copy(captures = request.captures - kind))
       val resource = className.replace('.', '/') + ".class"
       val bytes = result.classFiles[resource]
-      if (bytes == null) result else result.copy(captures = result.captures + (kind to renderJvmBytecode(bytes)))
+      return if (bytes == null) result else result.copy(captures = result.captures + (kind to renderJvmBytecode(bytes)))
     }
   }
 }

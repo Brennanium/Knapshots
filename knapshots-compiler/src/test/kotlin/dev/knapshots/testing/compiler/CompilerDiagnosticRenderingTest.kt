@@ -58,7 +58,7 @@ class CompilerDiagnosticRenderingTest {
     assertContains(Files.readString(file), "error:")
     val result = host.compile(CompilerRequest(listOf(CompilerSource("Main.kt", source)), version, emptySet()))
     val output = renderCompilerDiagnostics(listOf(CompilerSource("Main.kt", source)), result.diagnostics)
-    assertCompiler(source, version, host) { fails(); diagnostics { snapshot(output) } }
+    assertCompiler(source, version, host) { diagnostics { snapshot(output) } }
     assertCompiler(source, version, host) { fails(); diagnostics { snapshot(SnapshotExpectation("wrong", versions = mapOf(version to output))) } }
     assertFailsWith<AssertionError> { assertCompiler(source, version, host) { succeeds(); diagnostics { snapshot(output) } } }
   }

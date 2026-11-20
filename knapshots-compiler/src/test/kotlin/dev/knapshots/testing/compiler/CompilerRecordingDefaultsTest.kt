@@ -10,8 +10,9 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 
 class RecordingTestCompilerProvider : CompilerHostProvider {
-  override fun createCompiler() = CompilerHost { request ->
-    CompilerResult(true, captures = request.captures.associateWith { "generated ${it.name}" })
+  override fun createCompiler(): CompilerHost = object : CompilerHost {
+    override fun defaultSnapshotKinds() = setOf(CompilerSnapshotKind.FIR, CompilerSnapshotKind.IR)
+    override fun compile(request: CompilerRequest) = CompilerResult(true, captures = request.captures.associateWith { "generated ${it.name}" })
   }
 }
 
@@ -36,6 +37,29 @@ class CompilerRecordingDefaultsTest {
       System.setProperty("user.dir", previous)
       if (previousRecording == null) System.clearProperty("knapshots.compiler.record")
       else System.setProperty("knapshots.compiler.record", previousRecording)
+    }
+  }
+
+  @Test fun `input only discovers the calling test and records default captures`(@TempDir directory: Path) {
+    val relative = Path.of("dev/knapshots/testing/compiler/CompilerRecordingDefaultsTest.kt")
+    val copy = directory.resolve("src/customTest/kotlin").resolve(relative)
+    Files.createDirectories(copy.parent)
+    Files.copy(Path.of("src/test/kotlin").resolve(relative), copy)
+    val previousDirectory = System.getProperty("user.dir")
+    val previousRecording = System.getProperty("knapshots.compiler.record")
+    try {
+      System.setProperty("user.dir", directory.toString())
+      System.clearProperty("knapshots.compiler.record")
+      assertFailsWith<AssertionError> {
+        assertCompiler("class Example")
+      }
+      val output = Files.readString(copy)
+      assertContains(output, "generated FIR")
+      assertContains(output, "generated IR")
+      assertContains(output, "diagnostics { snapshot(")
+    } finally {
+      System.setProperty("user.dir", previousDirectory)
+      if (previousRecording == null) System.clearProperty("knapshots.compiler.record") else System.setProperty("knapshots.compiler.record", previousRecording)
     }
   }
 

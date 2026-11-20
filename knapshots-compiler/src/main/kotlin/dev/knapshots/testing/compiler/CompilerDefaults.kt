@@ -32,7 +32,7 @@ private fun configuredCompiler(): CompilerHost {
       val option = requireNotNull(options[kind]) { "Configure the compiler plugin's ${kind.name} capture option." }
       listOf("-P", "plugin:$id:$option=$path")
     } },
-  )
+  ).withDefaultSnapshotKinds(if (pluginId == null) emptySet() else options.filterValues { it != null }.keys)
 }
 
 /** Compile with the project's configured host and the Kotlin compiler on the test runtime classpath. */
@@ -61,7 +61,7 @@ public fun assertCompiler(
 }
 
 internal fun configuredRecording(): SnapshotRecording {
-  val value = System.getProperty("knapshots.compiler.record", "none")
+  val value = System.getProperty("knapshots.compiler.record", "missing")
   return try { SnapshotRecording.valueOf(value.uppercase(java.util.Locale.ROOT)) }
   catch (_: IllegalArgumentException) { error("Invalid knapshots.compiler.record '$value'; use none, missing, failed, or all.") }
 }
