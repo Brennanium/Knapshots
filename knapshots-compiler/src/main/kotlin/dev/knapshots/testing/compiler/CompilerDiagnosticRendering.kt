@@ -10,5 +10,5 @@ public fun renderCompilerDiagnostics(sources: List<CompilerSource>, diagnostics:
     val match = diagnostic.location?.replace('\\', '/')?.let { Regex("^(.*):(\\d+)$").matchEntire(it) }
     val fallback = diagnostic.location?.let { "$it${diagnostic.column?.let { column -> ":$column" } ?: ""}" }
     SourceDiagnostic(diagnostic.severity.name, diagnostic.message, match?.groupValues?.get(1),
-      match?.groupValues?.get(2)?.toIntOrNull(), diagnostic.column, fallback)
+      match?.groupValues?.get(2)?.toIntOrNull(), diagnostic.column, fallback, diagnostic.endLine, diagnostic.endColumn)
   })

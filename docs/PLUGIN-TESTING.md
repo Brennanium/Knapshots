@@ -72,7 +72,7 @@ assertKsp(invalidSource) {
 }
 ```
 
-`succeeds()` asserts success. `diagnostics()` records only diagnostics, and `diagnostics { snapshot(...) }` compares or re-records them explicitly. These forms do not require an outcome assertion. A line without a file refers to the first source; use `file = "Other.kt"` for another source. A `column` can be checked when the host provides one. The Gradle compiler host currently reports failed build output as one diagnostic rather than individual source positions.
+`succeeds()` asserts success. `diagnostics()` records only diagnostics, and `diagnostics { snapshot(...) }` compares or re-records them explicitly. These forms do not require an outcome assertion. A line without a file refers to the first source; use `file = "Other.kt"` for another source. A `column` can be checked when the host provides one. Embedded compiler snapshots underline a same-line diagnostic range when Kotlin supplies its exclusive end position, and otherwise show a caret at the start. The Gradle compiler host currently reports failed build output as one diagnostic rather than individual source positions.
 
 For inline compiler, KSP, and editor assertions, recording modes are `missing` (the default), `failed`, `all`, and `none`. Configure them through `knapshots { recording.set(...) }`, `-Pknapshots.recording=...`, or the assertion's `record` argument. Recording writes the test and fails it for review. In `none` mode, an input-only assertion with no saved snapshot fails instead of passing without an expectation. Compiler and KSP snapshots also accept a `SnapshotExpectation` for version-specific output. The parameter-based compiler and KSP snapshot APIs remain available.
 

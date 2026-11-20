@@ -11,6 +11,9 @@ public data class SourceDiagnostic(
   val line: Int? = null,
   val column: Int? = null,
   val fallbackLocation: String? = null,
+  /** One-based, exclusive end position, when available. */
+  val endLine: Int? = null,
+  val endColumn: Int? = null,
 )
 
 /** Render source diagnostics with one-based UTF-16 column positions. */
@@ -28,7 +31,10 @@ public fun renderSourceDiagnostics(sources: List<DiagnosticSource>, diagnostics:
       here.forEach { (diagnostic) ->
         diagnostic.column?.let { column ->
           val prefix = text.take((column - 1).coerceAtLeast(0)).map { if (it == '\t') '\t' else ' ' }.joinToString("")
-          output += "$prefix^"
+          val end = diagnostic.endColumn
+          val width = if (diagnostic.endLine == diagnostic.line && end != null &&
+            column in 1..text.length + 1 && end > column && end <= text.length + 1) end - column else 1
+          output += "$prefix^${"~".repeat(width - 1)}"
         }
         val lines = diagnostic.message.lines()
         output += "${diagnostic.severity.lowercase()}: ${lines.first()}"

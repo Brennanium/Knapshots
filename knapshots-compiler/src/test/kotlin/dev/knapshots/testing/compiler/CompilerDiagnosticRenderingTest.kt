@@ -22,6 +22,31 @@ class CompilerDiagnosticRenderingTest {
     assertEquals("", renderCompilerDiagnostics(sources, emptyList()))
   }
 
+  @Test fun `renders available same-line ranges and falls back for invalid ranges`() {
+    val source = CompilerSource("Main.kt", "\tval name = missingName")
+    val at = source.text.indexOf("missingName") + 1
+    val diagnostics = listOf(
+      CompilerDiagnostic(CompilerDiagnosticSeverity.ERROR, "missing", "Main.kt:1", at, 1, at + 11),
+      CompilerDiagnostic(CompilerDiagnosticSeverity.WARNING, "invalid", "Main.kt:1", at, 1, at - 1),
+      CompilerDiagnostic(CompilerDiagnosticSeverity.WARNING, "multiline", "Main.kt:1", at, 2, 3),
+    )
+    val rendered = renderCompilerDiagnostics(listOf(source), diagnostics)
+    assertContains(rendered, "^~~~~~~~~~~\nerror: missing")
+    assertContains(rendered, "^\nwarning: invalid")
+    assertContains(rendered, "^\nwarning: multiline")
+  }
+
+  @Test fun `embedded compiler exposes its available diagnostic end positions`() {
+    val source = "val count = unknownIdentifier"
+    val result = EmbeddedCompilerHost().compile(CompilerRequest(listOf(CompilerSource("Main.kt", source)), KotlinCompilerVersion.VERSION, emptySet()))
+    val error = result.diagnostics.first { it.severity == CompilerDiagnosticSeverity.ERROR }
+    assertEquals(1, error.location?.substringAfterLast(':')?.toIntOrNull())
+    assertEquals(source.indexOf("unknownIdentifier") + 1, error.column)
+    assertEquals(1, error.endLine)
+    assertEquals(source.length + 1, error.endColumn)
+    assertContains(renderCompilerDiagnostics(listOf(CompilerSource("Main.kt", source)), result.diagnostics), "^~~~~~~~~~~~~~~~~\nerror:")
+  }
+
   @Test fun `records real failed compilation and then compares snapshot`(@TempDir directory: Path) {
     val source = "val count: Int = \"hello\""
     val file = directory.resolve("Test.kt")

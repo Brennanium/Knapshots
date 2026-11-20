@@ -23,6 +23,9 @@ public data class CompilerDiagnostic(
   val location: String? = null,
   /** One-based column when supplied by the compiler. */
   val column: Int? = null,
+  /** One-based, exclusive end position when the compiler supplies a range. */
+  val endLine: Int? = null,
+  val endColumn: Int? = null,
 )
 
 public enum class CompilerDiagnosticSeverity { ERROR, WARNING, INFO }
