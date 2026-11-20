@@ -14,15 +14,20 @@ public object InlineRecordingWorker {
     val input = DataInputStream(BufferedInputStream(System.`in`))
     val output = DataOutputStream(BufferedOutputStream(System.out))
     while (input.readBoolean()) {
-      val file = Path.of(input.readSnapshotFrame())
-      val line = input.readInt()
-      val assertion = input.readSnapshotFrame()
-      val original = input.readSnapshotFrame()
-      val count = input.readInt()
-      require(count in 1..1000) { "Invalid snapshot count." }
-      val values = buildMap { repeat(count) { put(input.readSnapshotFrame(), input.readSnapshotFrame()) } }
+      val updateCount = input.readInt()
+      require(updateCount in 1..1000) { "Invalid snapshot update count." }
+      val updates = List(updateCount) {
+        val file = Path.of(input.readSnapshotFrame())
+        val line = input.readInt()
+        val assertion = input.readSnapshotFrame()
+        val original = input.readSnapshotFrame()
+        val count = input.readInt()
+        require(count in 1..1000) { "Invalid snapshot count." }
+        val values = buildMap { repeat(count) { put(input.readSnapshotFrame(), input.readSnapshotFrame()) } }
+        InlineSnapshotUpdate(InlineSnapshotLocation(file, line), assertion, values, original)
+      }
       try {
-        recordInlineSnapshots(InlineSnapshotLocation(file, line), assertion, values, "0.0.0", expectedSource = original)
+        recordInlineSnapshotBatch(updates, "0.0.0")
         output.writeBoolean(true)
         output.writeSnapshotFrame("")
       } catch (error: Exception) {

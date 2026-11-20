@@ -202,3 +202,22 @@ Both implement `CompilerHost`, so either can drive `assertCompiler`. Configure a
 `knapshots-intellij-fixture` adapts IntelliJ's `BasePlatformTestCase` and `CodeInsightTestFixture` to `assertEditor`. Extend `EditorFixtureTestCase` to use its source-hosting assertion, or use `IntellijEditorObservations` with an existing fixture. Provide the IntelliJ platform test framework and the IDE-compatible compiler/plugin setup in your own test project.
 
 This optional adapter is a separate build because it compiles against a selected IDE. From a Knapshots checkout, `./gradlew -p knapshots-intellij-fixture test -Pknapshots.idePath=/path/to/ide` verifies it without launching a full IDE. A composite consumer can include the Knapshots build and `knapshots-intellij-fixture`, then depend on `dev.knapshots:knapshots-intellij-fixture`. These lightweight tests do not prove Gradle import, KEFS loading, or full IDE behavior.
+
+### Quick fixes in a light fixture
+
+A single diagnostic can offer several quick fixes. Assert each fix by its displayed description and compare the source it produces:
+
+```kotlin
+assertEditor(source) {
+  quickFix("Create local variable") {
+    fixedSource()
+  }
+  quickFix("Create field") {
+    fixedSource()
+  }
+}
+```
+
+With recording enabled, Knapshots records each `fixedSource()` and the source diagnostics. Each fix starts from the original source, and all snapshots are written together. Specify `line = 2` on `quickFix` when the same description appears at more than one diagnostic; missing or ambiguous matches fail. You can also assert the diagnostics explicitly using `diagnostics { ... }`.
+
+This is an initial light-fixture implementation: it discovers intentions at diagnostic locations and snapshots the primary source only. Multi-file fixes and the imported-project editor host are not supported yet. Quick-fix labels and formatting can change between IDE versions; top-level `versioned` blocks can select different expectations.

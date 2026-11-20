@@ -80,7 +80,7 @@ public fun assertEditor(
     sourceFile.copy(text = sourceFile.text.trimIndent())
   }
   val expectations = EditorExpectations(checkDiagnostics, record, host.ideBuild(), host::ideRelease).apply(block).resolveVersions().prepareRecordingTarget()
-  val autoTarget = if (record != SnapshotRecording.NONE && expectations.shouldAutomaticallyCaptureDiagnostics()) location ?: discoverEditorSnapshotLocation() else null
+  val autoTarget = if (record != SnapshotRecording.NONE && (expectations.shouldAutomaticallyCaptureDiagnostics() || expectations.needsQuickFixDiagnostics())) location ?: discoverEditorSnapshotLocation() else null
   val observations = host.open(
     EditorRequest(
       sources = sources,
@@ -94,13 +94,13 @@ public fun assertEditor(
     if (record == SnapshotRecording.NONE && expectations.shouldAutomaticallyCaptureDiagnostics()) {
       throw AssertionError("Missing editor diagnostic snapshot; enable recording to insert it.")
     }
-    if (autoTarget != null) {
+    if (autoTarget != null && !expectations.hasQuickFixes()) {
       val actual = observations.diagnostics()
       try { recordEditorSnapshot(autoTarget, renderEditorDiagnostics(sources, actual), "assertEditor", "__diagnosticsBlock") }
       catch (error: Exception) { throw AssertionError("Could not record editor diagnostics at ${autoTarget.file}:${autoTarget.line}: ${error.message}", error) }
       throw AssertionError("Recorded editor diagnostics at ${autoTarget.file}:${autoTarget.line}; review and rerun the test.")
     }
-    expectations.verify(observations, sources)
+    expectations.verify(observations, sources, autoTarget)
     successful = true
   } finally {
     (observations as? EditorObservationSession)?.complete(successful)

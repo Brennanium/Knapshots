@@ -1,6 +1,7 @@
 package dev.knapshots.testing.editor
 
 import dev.knapshots.testing.snapshot.IsolatedSnapshotRecorder
+import dev.knapshots.testing.snapshot.SnapshotRecordUpdate
 import dev.knapshots.testing.snapshot.SnapshotRecording
 import java.nio.file.Files
 import java.nio.file.Path
@@ -24,7 +25,7 @@ internal fun discoverEditorSnapshotLocation(frames: Array<StackTraceElement> = T
       .toList()
   } else emptyList()
   val caller = frames.firstNotNullOfOrNull { frame ->
-    if (frame.lineNumber <= 0 || frame.fileName == null || frame.className == EditorExpectations::class.java.name) return@firstNotNullOfOrNull null
+    if (frame.lineNumber <= 0 || frame.fileName == null || frame.className == EditorExpectations::class.java.name || frame.className == QuickFixExpectations::class.java.name) return@firstNotNullOfOrNull null
     val packagePath = frame.className.substringBeforeLast('.', "").replace('.', '/')
     roots.map { it.resolve(packagePath).resolve(frame.fileName) }.firstOrNull(Files::isRegularFile)
       ?.let { EditorSnapshotLocation(it, frame.lineNumber) }
@@ -34,7 +35,7 @@ internal fun discoverEditorSnapshotLocation(frames: Array<StackTraceElement> = T
 
 private object EditorRecorder {
   private var recorder: IsolatedSnapshotRecorder? = null
-  @Synchronized fun record(location: EditorSnapshotLocation, output: String, assertionName: String, argumentName: String) {
+  @Synchronized fun record(updates: List<SnapshotRecordUpdate>) {
     val current = recorder ?: run {
       val classpath = requireNotNull(System.getProperty("knapshots.editor.recorderClasspath")) {
         "The isolated editor recording worker is not configured."
@@ -44,8 +45,14 @@ private object EditorRecorder {
         Runtime.getRuntime().addShutdownHook(Thread { worker.close() })
       }
     }
-    current.record(location.file, location.line, assertionName, mapOf(argumentName to output), location.original)
+    current.recordBatch(updates)
   }
 }
 
-internal fun recordEditorSnapshot(location: EditorSnapshotLocation, output: String, assertionName: String = "sourceDiagnosticsSnapshot", argumentName: String = "expected") = EditorRecorder.record(location, output, assertionName, argumentName)
+internal fun editorSnapshotUpdate(location: EditorSnapshotLocation, output: String, assertionName: String, argumentName: String = "expected") =
+  SnapshotRecordUpdate(location.file, location.line, assertionName, mapOf(argumentName to output), location.original)
+
+internal fun recordEditorSnapshot(location: EditorSnapshotLocation, output: String, assertionName: String = "sourceDiagnosticsSnapshot", argumentName: String = "expected") =
+  EditorRecorder.record(listOf(editorSnapshotUpdate(location, output, assertionName, argumentName)))
+
+internal fun recordEditorSnapshots(updates: List<SnapshotRecordUpdate>) = EditorRecorder.record(updates)

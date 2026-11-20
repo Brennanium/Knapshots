@@ -26,7 +26,7 @@ abstract class EditorFixtureTestCase : BasePlatformTestCase() {
           myFixture.addFileToProject(sourceFile.fileName, sourceFile.text)
         }
         myFixture.configureByText(main.fileName, main.text)
-        return IntellijEditorObservations(myFixture, ignoreMissingDependency)
+        return IntellijEditorObservations(myFixture, ignoreMissingDependency, request.sources)
       }
     }
     dev.knapshots.testing.editor.assertEditor(source = source, host = host, fileName = fileName,

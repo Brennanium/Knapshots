@@ -25,10 +25,20 @@ public sealed interface ReferenceObservation {
   public data class Unavailable(val reason: String) : ReferenceObservation
 }
 
+/** A request to find a quick fix at a diagnostic, optionally restricted to a source line. */
+public data class QuickFixRequest(val description: String, val line: Int? = null)
+
+/** Each fix is applied to the original input, independently of other fixes. */
+public sealed interface QuickFixObservation {
+  public data class Applied(val source: String) : QuickFixObservation
+  public data class Unavailable(val reason: String) : QuickFixObservation
+}
+
 /** Supplied by an IDE adapter; failures must not be reported as unresolved references. */
 public interface EditorObservations {
   public fun diagnostics(): List<EditorDiagnostic>
   public fun reference(expression: String): ReferenceObservation
+  public fun quickFix(request: QuickFixRequest): QuickFixObservation = QuickFixObservation.Unavailable("This editor host does not support quick fixes.")
   /** Product-prefixed build of the IDE that produced these observations, if known. */
   public fun ideBuild(): String? = null
   public fun ideRelease(): EditorRelease? = null
@@ -66,6 +76,7 @@ public class EditorExpectations internal constructor(
   private var deferredSourceSnapshotLocation: (() -> EditorSnapshotLocation)? = null
   private val expectedDiagnostics = mutableListOf<ExpectedDiagnostic>()
   private val references = mutableListOf<ReferenceExpectation>()
+  private val quickFixes = mutableListOf<QuickFixExpectations>()
   private var expectedDiagnosticSnapshot: String? = null
   private var expectedSourceDiagnosticSnapshot: String? = null
   private var hasSourceDiagnosticSnapshot = false
@@ -107,11 +118,16 @@ public class EditorExpectations internal constructor(
       references.removeAll { it.expression == reference.expression }
       references.add(reference)
     }
+    branch.quickFixes.forEach { fix ->
+      quickFixes.removeAll { it.request == fix.request }
+      quickFixes.add(fix)
+    }
     return this
   }
 
   internal fun prepareRecordingTarget(): EditorExpectations {
     deferredSourceSnapshotLocation?.let { sourceSnapshotLocation = it() }
+    quickFixes.forEach { it.prepareRecordingTarget() }
     return this
   }
 
@@ -175,12 +191,24 @@ public class EditorExpectations internal constructor(
     return ReferenceExpectation(expression).also(references::add)
   }
 
+  /** Assert a quick fix by its displayed description. Use [line] to disambiguate locations. */
+  public fun quickFix(description: String, line: Int? = null, block: QuickFixExpectations.() -> Unit) {
+    require(description.isNotBlank()) { "Quick fix description must not be blank." }
+    require(line == null || line > 0) { "Quick fix line must be positive." }
+    val request = QuickFixRequest(description, line)
+    check(quickFixes.none { it.request == request }) { "Quick fix already specified: $description" }
+    quickFixes.add(QuickFixExpectations(request, recording).apply(block).also { it.validate() })
+  }
+
   internal fun shouldAutomaticallyCaptureDiagnostics(): Boolean = checkDiagnostics && !hasDiagnosticBlock &&
-    expectedDiagnosticSnapshot == null && !hasSourceDiagnosticSnapshot && references.isEmpty()
+    expectedDiagnosticSnapshot == null && !hasSourceDiagnosticSnapshot && references.isEmpty() && quickFixes.isEmpty()
+
+  internal fun hasQuickFixes(): Boolean = quickFixes.isNotEmpty()
+  internal fun needsQuickFixDiagnostics(): Boolean = checkDiagnostics && quickFixes.isNotEmpty() && !hasDiagnosticBlock && expectedDiagnosticSnapshot == null && !hasSourceDiagnosticSnapshot
 
   internal fun requestedReferences(): Set<String> = references.mapTo(linkedSetOf()) { it.expression }
 
-  internal fun verify(observations: EditorObservations, sources: List<EditorSource>? = null) {
+  internal fun verify(observations: EditorObservations, sources: List<EditorSource>? = null, automaticDiagnostics: EditorSnapshotLocation? = null) {
     val failures = mutableListOf<String>()
     for (expected in references) {
       val shouldResolve = expected.shouldResolve
@@ -195,11 +223,20 @@ public class EditorExpectations internal constructor(
       }
     }
     if (failures.isNotEmpty()) throw AssertionError(failures.joinToString("\n", prefix = "Editor assertions failed:\n"))
-    if (checkDiagnostics) verifyDiagnostics(observations, failures, sources)
+    val updates = mutableListOf<dev.knapshots.testing.snapshot.SnapshotRecordUpdate>()
+    if (needsQuickFixDiagnostics()) {
+      if (automaticDiagnostics == null) failures += "Missing editor diagnostic snapshot; enable recording or add diagnostics expectations."
+      else updates += editorSnapshotUpdate(automaticDiagnostics, renderEditorDiagnostics(checkNotNull(sources), observations.diagnostics()), "assertEditor", "__diagnosticsBlock")
+    } else if (checkDiagnostics) verifyDiagnostics(observations, failures, sources, updates)
+    quickFixes.forEach { it.verify(observations, failures, updates) }
+    if (failures.isEmpty() && updates.isNotEmpty()) {
+      recordEditorSnapshots(updates.sortedByDescending { it.line })
+      throw AssertionError("Recorded editor diagnostics and/or quick-fix snapshots; review and rerun the test.")
+    }
     if (failures.isNotEmpty()) throw AssertionError(failures.joinToString("\n", prefix = "Editor assertions failed:\n"))
   }
 
-  private fun verifyDiagnostics(observations: EditorObservations, failures: MutableList<String>, sources: List<EditorSource>?) {
+  private fun verifyDiagnostics(observations: EditorObservations, failures: MutableList<String>, sources: List<EditorSource>?, updates: MutableList<dev.knapshots.testing.snapshot.SnapshotRecordUpdate>) {
     val actual = observations.diagnostics()
     val expectedSnapshot = expectedDiagnosticSnapshot
     val sourceSnapshot = expectedSourceDiagnosticSnapshot
@@ -212,8 +249,8 @@ public class EditorExpectations internal constructor(
       )
       if (shouldRecord) {
         val location = checkNotNull(sourceSnapshotLocation)
-        recordEditorSnapshot(location, rendered, sourceSnapshotCall)
-        throw AssertionError("Recorded editor diagnostics at ${location.file}:${location.line}; review and rerun the test.")
+        updates += editorSnapshotUpdate(location, rendered, sourceSnapshotCall)
+        return
       }
       if (sourceSnapshot == null) throw AssertionError("Missing source diagnostic snapshot; enable recording to insert it.")
       if (difference != null) failures += "Source diagnostic snapshot differs:\nExpected:\n${difference.expected}\nActual:\n${difference.actual}"
@@ -311,4 +348,41 @@ internal fun renderEditorDiagnostics(sources: List<EditorSource>, actual: List<E
           match?.groupValues?.get(2)?.toIntOrNull() ?: lineOnly?.groupValues?.get(2)?.toIntOrNull(),
           match?.groupValues?.get(3)?.toIntOrNull(), diagnostic.location)
       })
+}
+
+/** Expected result of invoking one editor quick fix. */
+public class QuickFixExpectations internal constructor(
+  internal val request: QuickFixRequest,
+  private val recording: SnapshotRecording,
+) {
+  private var specified = false
+  private var expected: String? = null
+  private var deferredLocation: (() -> EditorSnapshotLocation)? = null
+  private var location: EditorSnapshotLocation? = null
+
+  /** Compare or record the primary source after this fix has been applied. */
+  public fun fixedSource(expected: String? = null, location: EditorSnapshotLocation? = null) {
+    check(!specified) { "fixedSource can only be specified once per quick fix." }
+    specified = true
+    this.expected = expected?.let(::trimSnapshotIndent)?.trimEnd('\n', '\r')
+    if (dev.knapshots.testing.snapshot.mayRecordSnapshot(recording, expected == null)) {
+      val frames = Throwable().stackTrace
+      deferredLocation = { location ?: discoverEditorSnapshotLocation(frames) }
+    }
+  }
+  internal fun validate() { check(specified) { "A quick fix must specify fixedSource()." } }
+  internal fun prepareRecordingTarget() { deferredLocation?.let { location = it() } }
+  internal fun verify(observations: EditorObservations, failures: MutableList<String>, updates: MutableList<dev.knapshots.testing.snapshot.SnapshotRecordUpdate>) {
+    when (val result = observations.quickFix(request)) {
+      is QuickFixObservation.Unavailable -> failures += "Cannot apply quick fix '${request.description}': ${result.reason}"
+      is QuickFixObservation.Applied -> {
+        val actual = result.source.trimEnd('\n', '\r')
+        val difference = expected?.let { compareSnapshot(actual, it, textSnapshotting) }
+        if (dev.knapshots.testing.snapshot.shouldRecordSnapshot(recording, expected == null, expected == null || difference != null)) {
+          updates += editorSnapshotUpdate(checkNotNull(location), actual, "fixedSource")
+        } else if (expected == null) failures += "Missing fixedSource snapshot for '${request.description}'; enable recording."
+        else if (difference != null) failures += "Fixed source for '${request.description}' differs:\nExpected:\n${difference.expected}\nActual:\n${difference.actual}"
+      }
+    }
+  }
 }

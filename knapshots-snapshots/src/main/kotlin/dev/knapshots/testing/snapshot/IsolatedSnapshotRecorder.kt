@@ -7,6 +7,12 @@ import java.io.DataOutputStream
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
 
+/** One source edit in an atomic recording batch. */
+public data class SnapshotRecordUpdate(
+  val file: Path, val line: Int, val assertionName: String,
+  val values: Map<String, String>, val expectedSource: String,
+)
+
 /** A persistent worker keeps recorder state while isolating compiler classes from the caller. */
 public class IsolatedSnapshotRecorder(workerClasspath: List<Path>) : AutoCloseable {
   private val process: Process
@@ -24,14 +30,23 @@ public class IsolatedSnapshotRecorder(workerClasspath: List<Path>) : AutoCloseab
 
   /** Record one assertion. The caller must supply the source read before its test started. */
   @Synchronized public fun record(file: Path, line: Int, assertionName: String, values: Map<String, String>, expectedSource: String) {
-    require(line > 0 && values.isNotEmpty())
+    recordBatch(listOf(SnapshotRecordUpdate(file, line, assertionName, values, expectedSource)))
+  }
+
+  /** Write all edits to one test source atomically, or leave it unchanged on failure. */
+  @Synchronized public fun recordBatch(updates: List<SnapshotRecordUpdate>) {
+    require(updates.isNotEmpty())
+    require(updates.all { it.line > 0 && it.values.isNotEmpty() })
     output.writeBoolean(true)
-    output.writeFrame(file.toAbsolutePath().normalize().toString())
-    output.writeInt(line)
-    output.writeFrame(assertionName)
-    output.writeFrame(expectedSource)
-    output.writeInt(values.size)
-    values.forEach { (name, value) -> output.writeFrame(name); output.writeFrame(value) }
+    output.writeInt(updates.size)
+    for (update in updates) {
+      output.writeFrame(update.file.toAbsolutePath().normalize().toString())
+      output.writeInt(update.line)
+      output.writeFrame(update.assertionName)
+      output.writeFrame(update.expectedSource)
+      output.writeInt(update.values.size)
+      update.values.forEach { (name, value) -> output.writeFrame(name); output.writeFrame(value) }
+    }
     output.flush()
     val succeeded = try { input.readBoolean() } catch (error: java.io.EOFException) {
       throw IllegalStateException("Snapshot recording worker exited unexpectedly (exit=${if (process.isAlive) "running" else process.exitValue()}).", error)

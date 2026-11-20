@@ -132,7 +132,7 @@ internal object InlineCompilerSnapshots {
         if (name in setOf("__generatedBlock", "__firBlock", "__irBlock", "__diagnosticsBlock")) continue
         val named = args.arguments.filter { it.getArgumentName()?.asName?.asString() == name }
         val positional = args.arguments.filter { it.getArgumentName() == null }
-        val special = assertionName in setOf("sourceDiagnosticsSnapshot", "snapshot", "generated", "fir", "ir", "bytecode", "default", "versioned") && name == "expected"
+        val special = assertionName in setOf("sourceDiagnosticsSnapshot", "snapshot", "fixedSource", "generated", "fir", "ir", "bytecode", "default", "versioned") && name == "expected"
         val matches = if (named.isNotEmpty() || !special) named else {
           val first = positional.firstOrNull()?.getArgumentExpression()
           val second = positional.getOrNull(1)?.getArgumentExpression()
@@ -157,7 +157,7 @@ internal object InlineCompilerSnapshots {
               val label = if (selector.getArgumentName() != null) "expected = " else ""
               edits += Triple(selector.textRange.endOffset, selector.textRange.endOffset, ", $label${literal(value)}")
             }
-          } else if (assertionName in setOf("sourceDiagnosticsSnapshot", "snapshot", "generated", "fir", "ir", "bytecode", "default") && name == "expected") {
+          } else if (assertionName in setOf("sourceDiagnosticsSnapshot", "snapshot", "fixedSource", "generated", "fir", "ir", "bytecode", "default") && name == "expected") {
             val first = args.arguments.firstOrNull()
             val insert = first?.textRange?.startOffset ?: args.rightParenthesis?.textRange?.startOffset ?: error("Missing closing parenthesis.")
             val replacement = if (first == null) literal(value) else "expected = ${literal(value)}, "
@@ -166,7 +166,7 @@ internal object InlineCompilerSnapshots {
           continue
         }
         val rawExpression = argument.getArgumentExpression()
-        if (assertionName in setOf("sourceDiagnosticsSnapshot", "snapshot", "generated", "fir", "ir", "bytecode", "default", "versioned") && name == "expected" && rawExpression is KtStringTemplateExpression) {
+        if (assertionName in setOf("sourceDiagnosticsSnapshot", "snapshot", "fixedSource", "generated", "fir", "ir", "bytecode", "default", "versioned") && name == "expected" && rawExpression is KtStringTemplateExpression) {
           require(!versioned) { "Version-specific recording requires a SnapshotExpectation." }
           setExpression(rawExpression, value)
           continue

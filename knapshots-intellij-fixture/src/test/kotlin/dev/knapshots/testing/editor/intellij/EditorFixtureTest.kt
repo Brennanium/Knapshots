@@ -38,6 +38,38 @@ class EditorFixtureTest : EditorFixtureTestCase() {
       reference("this.missing").isUnresolved()
     }
   }
+  fun testFindsAvailableQuickFixes() {
+    val failure = runCatching {
+      assertEditor(fileName = "Broken.java", source = "class Broken { int read() { return missing; } }") {
+        diagnostics { error("Cannot resolve symbol") }
+        quickFix("__no_such_fix__") { fixedSource("unused") }
+      }
+    }.exceptionOrNull()
+    assertTrue(failure is AssertionError)
+    assertTrue(failure?.message?.contains("no matching fix") == true)
+  }
+
+  fun testAppliesTwoQuickFixesIndependently() {
+    assertEditor(fileName = "Broken.java", source = "class Broken { int read() { return missing; } }") {
+      diagnostics { error("Cannot resolve symbol") }
+      quickFix("Create local variable") {
+        fixedSource("""
+          class Broken { int read() {
+              int missing;
+              return missing; } }
+        """)
+      }
+      quickFix("Create field") {
+        fixedSource("""
+          class Broken {
+              private int missing;
+
+              int read() { return missing; } }
+        """)
+      }
+    }
+  }
+
   fun testVersionedExpectationsUseActualIdeBuild() {
     val build = com.intellij.openapi.application.ApplicationInfo.getInstance().build.asString()
     assertEditor(source = "plain text", fileName = "Example.txt") {
