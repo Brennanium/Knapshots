@@ -28,7 +28,7 @@ class EditorVersionedAssertionsTest {
     assertEquals("AI-262.*", selectEditorBuild(setOf("AI-262.*", "IU-262.*"), "AI-262.1.2.3"))
     assertEquals("AI-262.1.2.3", selectEditorBuild(setOf("AI-262.*", "AI-262.1.2.3"), "AI-262.1.2.3"))
     assertEquals(null, selectEditorBuild(setOf("IU-262.*"), "AI-262.1.2.3"))
-    assertFailsWith<IllegalArgumentException> { selectEditorBuild(setOf("AI-262.*", "AI-262.1.*"), "AI-262.1.2") }
+    assertEquals("AI-262.1.*", selectEditorBuild(setOf("AI-262.*", "AI-262.1.*"), "AI-262.1.2"))
     assertFailsWith<IllegalArgumentException> { selectEditorBuild(setOf("2026.2.*"), "AI-262.1.2") }
   }
 
@@ -180,7 +180,9 @@ class EditorVersionedAssertionsTest {
       }
     }
     assertEquals(null, selectEditorBuild(setOf("Rabbit 3"), build) { release })
-    assertFailsWith<IllegalArgumentException> { selectEditorBuild(setOf("Rabbit", "Rabbit 2"), build) { release } }
+    assertEquals("Rabbit 2", selectEditorBuild(setOf("Rabbit", "Rabbit 2"), build) { release })
+    assertEquals("2026.2.2.*", selectEditorBuild(setOf("2026.2.*", "2026.2.2.*"), build) { release })
+    assertFailsWith<IllegalArgumentException> { selectEditorBuild(setOf("Rabbit 2", "2026.2.2.*"), build) { release } }
     assertFailsWith<IllegalArgumentException> { selectEditorBuild(setOf("2026.2.2.8"), build) { release.copy(build = "AI-263.1") } }
     assertFailsWith<IllegalArgumentException> { selectEditorBuild(setOf("Rabbit"), build) { null } }
     assertEquals(null, selectEditorBuild(setOf("Rabbit"), "IU-262.1") { error("not Android Studio") })
@@ -216,6 +218,48 @@ class EditorVersionedAssertionsTest {
       assertContains(recorded, "versioned(\"$selector\", \"\"\"")
       assertContains(recorded, "error: problem")
     }
+  }
+
+  @Test fun `recording targets the narrower Rabbit family`(@TempDir directory: Path) {
+    val file = directory.resolve("NarrowEditor.kt")
+    Files.writeString(file, "fun test() {\n  diagnostics {\n    default()\n    versioned(\"Rabbit\")\n    versioned(\"Rabbit 2\")\n  }\n}\n")
+    val build = "AI-262.10968.63.2622.16730706"
+    val release = EditorRelease(build, "2026.2.2.8", "Android Studio Rabbit 2 | 2026.2.2")
+    assertFailsWith<AssertionError> {
+      assertEditor("bad", host(build, release = release), record = SnapshotRecording.MISSING) {
+        diagnostics { default(); versioned("Rabbit", location = EditorSnapshotLocation(file, 4)); versioned("Rabbit 2", location = EditorSnapshotLocation(file, 5)) }
+      }
+    }
+    val result = Files.readString(file)
+    assertContains(result, "versioned(\"Rabbit\")")
+    assertContains(result, "versioned(\"Rabbit 2\", \"\"\"")
+    assertContains(result, "error: problem")
+  }
+
+  @Test fun `top-level branches select Rabbit 2 over Rabbit`() {
+    val build = "AI-262.10968.63.2622.16730706"
+    val release = EditorRelease(build, "2026.2.2.8", "Android Studio Rabbit 2 | 2026.2.2")
+    assertEditor("bad", host(build, release = release), record = SnapshotRecording.NONE) {
+      default { diagnostics { error("wrong default") } }
+      versioned("Rabbit") { diagnostics { error("wrong family") } }
+      versioned("Rabbit 2") { diagnostics { error("problem") } }
+    }
+  }
+
+  @Test fun `recording uses the narrower top-level editor branch`(@TempDir directory: Path) {
+    val file = directory.resolve("NarrowBranch.kt")
+    Files.writeString(file, "fun test() {\n  versioned(\"Rabbit\") { diagnostics() }\n  versioned(\"Rabbit 2\") { diagnostics() }\n}\n")
+    val build = "AI-262.10968.63.2622.16730706"
+    val release = EditorRelease(build, "2026.2.2.8", "Android Studio Rabbit 2 | 2026.2.2")
+    assertFailsWith<AssertionError> {
+      assertEditor("bad", host(build, release = release), record = SnapshotRecording.MISSING) {
+        versioned("Rabbit") { diagnostics(EditorSnapshotLocation(file, 2)) }
+        versioned("Rabbit 2") { diagnostics(EditorSnapshotLocation(file, 3)) }
+      }
+    }
+    val result = Files.readString(file)
+    assertContains(result, "versioned(\"Rabbit\") { diagnostics() }")
+    assertContains(result, "error: problem")
   }
 
 }

@@ -53,6 +53,11 @@ class EditorFixtureTest : EditorFixtureTestCase() {
           diagnostics { default("should not be selected"); versioned(selector, "") }
         }
       }
+      if (' ' in name) {
+        assertEditor(source = "plain text", fileName = "Example.txt") {
+          diagnostics { default("wrong default"); versioned(name.substringBefore(' '), "wrong family"); versioned(name, "") }
+        }
+      }
     }
   }
 

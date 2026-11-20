@@ -335,4 +335,18 @@ class FixturePluginIntegrationTest {
     }
   }
 
+  @Test fun `real fixture selects the narrower compiler family`() {
+    val components = version.substringBefore('-').split('.')
+    val major = components[0]
+    val minor = components[1].toInt()
+    val nextPatch = components[2].toInt() + 1
+    assertCompiler(source, version, host, record = SnapshotRecording.NONE) {
+      fir {
+        default("wrong default")
+        versioned("$major.$minor.*", "wrong broad family")
+        versioned(">=$version <$major.$minor.$nextPatch", "FIR classes\nfixture.AddMember\nfixture.Example")
+      }
+    }
+  }
+
 }

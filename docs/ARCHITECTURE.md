@@ -52,7 +52,7 @@ driver:
   plugin-specific output.
 - `SnapshotExpectation` supports a default capture and compiler-version-specific overrides.
 - Version selectors understand exact versions, `major.minor.*`, and bounded expressions such
-  as `>=2.4.20 <2.5.0`. Exact selectors win. Ambiguous matching ranges fail.
+  as `>=2.4.20 <2.5.0`. Exact selectors win; otherwise the uniquely narrower matching range is selected. Incomparable overlapping ranges fail.
 - `assertCompiler` supplies one or more source files to a pluggable `CompilerHost` and checks an
   explicitly expected success/failure outcome, diagnostics, and requested captures. This gives
   failure tests a real contract: a source that unexpectedly compiles successfully fails.

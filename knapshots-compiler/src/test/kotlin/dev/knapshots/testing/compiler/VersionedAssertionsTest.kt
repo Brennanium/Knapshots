@@ -43,7 +43,7 @@ class VersionedAssertionsTest {
     }
     assertFailsWith<IllegalArgumentException> {
       assertCompiler("", "2.5.0-dev-42", never, record = SnapshotRecording.NONE) {
-        fir { default("x"); versioned("2.5.*", "y"); versioned(">=2.5.0-dev-1", "z") }
+        fir { default("x"); versioned(">=2.5.0-dev-1 <2.5.0-dev-60", "y"); versioned(">=2.5.0-dev-30 <2.5.0-dev-80", "z") }
       }
     }
     assertFailsWith<IllegalArgumentException> {
@@ -195,6 +195,43 @@ class VersionedAssertionsTest {
       }
     }
     assertContains(failure.message.orEmpty(), "Missing FIR snapshot")
+  }
+
+  @Test fun `recording targets the narrower matching compiler family`(@TempDir directory: Path) {
+    val file = directory.resolve("NarrowCompiler.kt")
+    val source = "fun test() {\n  fir {\n    default(\"default\")\n    versioned(\"2.4.*\")\n    versioned(\">=2.4.20 <2.5.0\")\n  }\n}\n"
+    Files.writeString(file, source)
+    assertFailsWith<AssertionError> {
+      assertCompiler("class A", "2.4.21", host(setOf(CompilerSnapshotKind.FIR)), record = SnapshotRecording.MISSING) {
+        fir { default("default"); versioned("2.4.*", location = InlineSnapshotLocation(file, 4)); versioned(">=2.4.20 <2.5.0", location = InlineSnapshotLocation(file, 5)) }
+      }
+    }
+    val result = Files.readString(file)
+    assertContains(result, "versioned(\"2.4.*\")")
+    assertContains(result, "versioned(\">=2.4.20 <2.5.0\", \"\"\"")
+    assertContains(result, "FIR 2.4.21")
+  }
+
+  @Test fun `top-level branches select the narrower compiler family`() {
+    assertCompiler("class A", "2.4.21", host(setOf(CompilerSnapshotKind.FIR)), record = SnapshotRecording.NONE) {
+      default { fails() }
+      versioned("2.4.*") { fails() }
+      versioned(">=2.4.20 <2.5.0") { succeeds(); fir("FIR 2.4.21") }
+    }
+  }
+
+  @Test fun `recording uses the narrower top-level compiler branch`(@TempDir directory: Path) {
+    val file = directory.resolve("NarrowBranch.kt")
+    Files.writeString(file, "fun test() {\n  versioned(\"2.4.*\") { fir() }\n  versioned(\">=2.4.20 <2.5.0\") { fir() }\n}\n")
+    assertFailsWith<AssertionError> {
+      assertCompiler("class A", "2.4.21", host(setOf(CompilerSnapshotKind.FIR)), record = SnapshotRecording.MISSING) {
+        versioned("2.4.*") { fir(location = InlineSnapshotLocation(file, 2)) }
+        versioned(">=2.4.20 <2.5.0") { fir(location = InlineSnapshotLocation(file, 3)) }
+      }
+    }
+    val result = Files.readString(file)
+    assertContains(result, "versioned(\"2.4.*\") { fir() }")
+    assertContains(result, "FIR 2.4.21")
   }
 
 }

@@ -3,7 +3,7 @@ package dev.knapshots.testing.editor
 /** Android Studio release information associated with one exact, product-prefixed IDE build. */
 public data class EditorRelease(val build: String, val version: String, val name: String)
 
-/** Selects exact builds/releases before a single matching build, release, or name family. */
+/** Selects exact builds/releases, then the uniquely narrowest matching family. */
 internal fun selectEditorBuild(selectors: Set<String>, build: String, release: () -> EditorRelease? = { null }): String? {
   val buildMatch = Regex("^([A-Za-z]+)-([0-9]+(?:\\.[0-9]+)*)$").matchEntire(build)
     ?: throw IllegalArgumentException("Invalid IDE build identifier: $build")
@@ -50,8 +50,31 @@ internal fun selectEditorBuild(selectors: Set<String>, build: String, release: (
   require(exact.size <= 1) { "Ambiguous exact IDE selectors for $build: ${exact.sorted().joinToString()}." }
   exact.singleOrNull()?.let { return it }
   val families = matching.map { it.first }
-  require(families.size <= 1) { "Ambiguous IDE selectors for $build: ${families.sorted().joinToString()}." }
-  return families.singleOrNull()
+  if (families.size <= 1) return families.singleOrNull()
+  fun isNarrower(candidate: String, other: String): Boolean {
+    val candidateBuild = parsed.getValue(candidate).first
+    val otherBuild = parsed.getValue(other).first
+    val candidateRelease = parsed.getValue(candidate).second
+    val otherRelease = parsed.getValue(other).second
+    if (candidateBuild != null && otherBuild != null) {
+      val prefix = candidateBuild.groupValues[2].split('.')
+      val broader = otherBuild.groupValues[2].split('.')
+      return candidateBuild.groupValues[1].equals(otherBuild.groupValues[1], true) &&
+        prefix.size > broader.size && prefix.take(broader.size) == broader
+    }
+    if (candidateRelease != null && otherRelease != null) {
+      val prefix = candidateRelease.groupValues[1].split('.')
+      val broader = otherRelease.groupValues[1].split('.')
+      return prefix.size > broader.size && prefix.take(broader.size) == broader
+    }
+    if (candidateBuild == null && otherBuild == null && candidateRelease == null && otherRelease == null) {
+      return candidate.startsWith("$other ", ignoreCase = true)
+    }
+    return false
+  }
+  val narrowest = families.filter { candidate -> families.all { other -> candidate == other || isNarrower(candidate, other) } }
+  require(narrowest.size == 1) { "Ambiguous IDE selectors for $build: ${families.sorted().joinToString()}." }
+  return narrowest.single()
 }
 
 /** Source-context diagnostic snapshots selected using the actual IDE build and release. */

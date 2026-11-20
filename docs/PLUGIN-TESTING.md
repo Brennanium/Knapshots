@@ -97,7 +97,7 @@ assertCompiler(source) {
 }
 ```
 
-`default(...)` is required within a versioned snapshot. Exact selectors, minor-family selectors such as `2.5.*`, and comparison ranges such as `>=2.4.20 <2.5.0` are supported. A minor-family selector includes preview versions in that family; `>=2.5.0` starts at the final release. Exact matches take precedence and overlapping non-exact selectors fail instead of choosing one. Invalid selectors are rejected even when they do not match.
+`default(...)` is required within a versioned snapshot. Exact selectors, minor-family selectors such as `2.5.*`, and comparison ranges such as `>=2.4.20 <2.5.0` are supported. A minor-family selector includes preview versions in that family. For an unqualified release boundary, `<2.5.0` excludes all `2.5.0` previews, and `>=2.5.0` includes them; an explicit preview boundary such as `>=2.5.0-dev-42` uses preview ordering. Exact matches take precedence, followed by a uniquely narrower matching selector. A narrower selector must describe a strict subset of the broader one. Equivalent or incomparable overlapping selectors fail rather than guessing. Invalid selectors are rejected even when they do not match.
 
 Leave a value out to record it on the compiler version that selects it:
 
@@ -151,7 +151,7 @@ assertEditor(source) {
 }
 ```
 
-An empty placeholder is recorded only when selected; inactive placeholders are ignored. Selectors accept exact product-prefixed IDE builds such as `AI-262.10968.63.2622.16730706`, and build families such as `AI-262.*` and `IU-263.*`. Android Studio also supports exact release numbers such as `2026.2.2.8`, release families such as `2026.2.2.*`, and release names such as `Rabbit` or `Rabbit 2`. `Rabbit` includes numbered Rabbit releases; `Rabbit 2` targets that release line. `AI` identifies Android Studio, while IntelliJ editions use their own product codes. Exact builds and exact release numbers take precedence over families; multiple matching exact selectors or overlapping families fail rather than guessing. Comparison ranges are not yet supported.
+An empty placeholder is recorded only when selected; inactive placeholders are ignored. Selectors accept exact product-prefixed IDE builds such as `AI-262.10968.63.2622.16730706`, and build families such as `AI-262.*` and `IU-263.*`. Android Studio also supports exact release numbers such as `2026.2.2.8`, release families such as `2026.2.2.*`, and release names such as `Rabbit` or `Rabbit 2`. `Rabbit` includes numbered Rabbit releases; `Rabbit 2` targets that release line. `AI` identifies Android Studio, while IntelliJ editions use their own product codes. Exact builds and exact release numbers take precedence over families. Nested families choose the narrower match, so `Rabbit 2` wins over `Rabbit` and `2026.2.2.*` wins over `2026.2.*`. Incomparable matching selectors and multiple matching exact selectors fail rather than guessing. Comparison ranges are not yet supported.
 
 The compatibility task passes release metadata for its verified IDE build to the test driver. For a locally selected Android Studio outside that task, a release-number or name selector looks up its exact build in JetBrains' public release feed and caches the result in the test process. Build-only selectors do not need a feed lookup. If release metadata is unavailable or doesn't match the selected build, the assertion fails rather than silently choosing the default. Custom hosts can provide verified metadata using `ideRelease()`.
 

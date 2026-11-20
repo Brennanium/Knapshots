@@ -19,7 +19,7 @@ class InlineCompilerSnapshotsTest {
       fun test() {
         assertCompiler(
           source = "source",
-          fir = SnapshotExpectation("shared", versions = mapOf("2.5.*" to "one", ">=2.5.0-dev-1" to "two")),
+          fir = SnapshotExpectation("shared", versions = mapOf(">=2.5.0-dev-1 <2.5.0-dev-60" to "one", ">=2.5.0-dev-30 <2.5.0-dev-80" to "two")),
         )
       }
     """.trimIndent()

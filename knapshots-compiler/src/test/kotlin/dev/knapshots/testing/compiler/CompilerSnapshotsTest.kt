@@ -16,9 +16,9 @@ class CompilerSnapshotsTest {
       Triple("2.5.*", "2.5.0-dev-42", true),
       Triple("2.5.*", "2.5.4", true),
       Triple("2.5.*", "2.6.0", false),
-      Triple(">=2.5.0", "2.5.0-dev-42", false),
+      Triple(">=2.5.0", "2.5.0-dev-42", true),
       Triple(">=2.5.0", "2.5.0", true),
-      Triple("<2.5.0", "2.5.0-dev-42", true),
+      Triple("<2.5.0", "2.5.0-dev-42", false),
       Triple(">=2.4.20 <2.5.0", "2.4.21", true),
       Triple(">=2.4.20 <2.5.0", "2.5.0", false),
       Triple(">=2.5.0-dev-99", "2.5.0-dev-100", true),
@@ -31,11 +31,34 @@ class CompilerSnapshotsTest {
   }
 
   @Test
-  fun `exact overrides win over ranges and overlapping ranges are rejected`() {
-    val versions = mapOf("2.5.*" to "wildcard", ">=2.5.0-dev-1" to "range", "2.5.0" to "exact")
+  fun `exact overrides win and incomparable overlapping ranges are rejected`() {
+    val versions = mapOf("2.5.*" to "wildcard", ">=2.5.0-dev-1 <2.6.0" to "range", "2.5.0" to "exact")
     assertEquals("exact", SnapshotExpectation("default", versions).forVersion("2.5.0"))
-    assertFailsWith<IllegalArgumentException> { SnapshotExpectation("default", versions).forVersion("2.5.0-dev-43") }
+    assertEquals("range", SnapshotExpectation("default", versions).forVersion("2.5.0-dev-43"))
+    assertFailsWith<IllegalArgumentException> {
+      selectCompilerVersion(setOf("2.5.*", ">=2.5.0-dev-1"), "2.5.0-dev-43")
+    }
+    assertFailsWith<IllegalArgumentException> {
+      selectCompilerVersion(setOf(">=2.5.0-dev-1 <2.5.0-dev-60", ">=2.5.0-dev-30 <2.5.0-dev-80"), "2.5.0-dev-43")
+    }
     assertFailsWith<IllegalArgumentException> { selectCompilerVersion(setOf("2.5.x"), "2.5.0") }
+  }
+
+  @Test fun `narrower selectors win and release boundaries include their previews`() {
+    val versions = setOf("2.4.*", ">=2.4.20 <2.5.0", "2.4.21")
+    assertEquals("2.4.*", selectCompilerVersion(versions, "2.4.19"))
+    assertEquals(">=2.4.20 <2.5.0", selectCompilerVersion(versions, "2.4.20-dev-1"))
+    assertEquals("2.4.21", selectCompilerVersion(versions, "2.4.21"))
+    assertEquals(">=2.4.20 <2.5.0", selectCompilerVersion(versions, "2.4.22"))
+    assertEquals(null, selectCompilerVersion(versions, "2.5.0-dev-1"))
+    assertEquals(null, selectCompilerVersion(setOf("<2.5.0"), "2.5.0-dev-1"))
+    assertFailsWith<IllegalArgumentException> {
+      selectCompilerVersion(setOf("2.4.*", ">=2.4.0 <2.5.0"), "2.4.21")
+    }
+    assertEquals(">=2.5.0", selectCompilerVersion(setOf(">=2.5.0"), "2.5.0-dev-1"))
+    assertEquals("<2.5.0-dev-42", selectCompilerVersion(setOf("<2.5.0-dev-42"), "2.5.0-dev-41"))
+    assertEquals(null, selectCompilerVersion(setOf(">2.5.0"), "2.5.0-dev-42"))
+    assertEquals("<=2.5.0", selectCompilerVersion(setOf("<=2.5.0"), "2.5.0-dev-42"))
   }
 
   @Test
@@ -45,7 +68,7 @@ class CompilerSnapshotsTest {
       CompilerSnapshotKind.IR to SnapshotExpectation("default ir", mapOf(">=2.5.0" to "released ir")),
     )
     assertCompilerSnapshots("source", "2.5.0-dev-42", expected) { _, _, _ ->
-      mapOf(CompilerSnapshotKind.FIR to "preview fir", CompilerSnapshotKind.IR to "default ir")
+      mapOf(CompilerSnapshotKind.FIR to "preview fir", CompilerSnapshotKind.IR to "released ir")
     }
     assertCompilerSnapshots("source", "2.5.0", expected) { _, _, _ ->
       mapOf(CompilerSnapshotKind.FIR to "preview fir", CompilerSnapshotKind.IR to "released ir")

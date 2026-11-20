@@ -354,4 +354,18 @@ class FixtureProcessorIntegrationTest {
     }
   }
 
+  @Test fun `real fixture selects the narrower compiler family`() {
+    val components = version.substringBefore('-').split('.')
+    val major = components[0]
+    val minor = components[1].toInt()
+    val nextPatch = components[2].toInt() + 1
+    assertKsp(source, version, host, record = SnapshotRecording.NONE) {
+      generated {
+        default("wrong default")
+        versioned("$major.$minor.*", "wrong broad family")
+        versioned(">=$version <$major.$minor.$nextPatch", generated)
+      }
+    }
+  }
+
 }

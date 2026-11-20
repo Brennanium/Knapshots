@@ -68,4 +68,28 @@ class VersionedKspAssertionsTest {
     }
   }
 
+  @Test fun `narrow compiler family is selected for generated source`() {
+    assertKsp("input", "2.4.21", host, record = SnapshotRecording.NONE) {
+      generated {
+        default("wrong default")
+        versioned("2.4.*", "wrong broad family")
+        versioned(">=2.4.20 <2.5.0", "// FILE: Out.kt\nversion 2.4.21")
+      }
+    }
+  }
+
+  @Test fun `recording targets the narrower matching compiler family`(@TempDir directory: Path) {
+    val file = directory.resolve("NarrowKsp.kt")
+    Files.writeString(file, "fun test() {\n  generated {\n    default()\n    versioned(\"2.4.*\")\n    versioned(\">=2.4.20 <2.5.0\")\n  }\n}\n")
+    assertFailsWith<AssertionError> {
+      assertKsp("input", "2.4.21", host, record = SnapshotRecording.MISSING) {
+        generated { default(); versioned("2.4.*", location = InlineSnapshotLocation(file, 4)); versioned(">=2.4.20 <2.5.0", location = InlineSnapshotLocation(file, 5)) }
+      }
+    }
+    val output = Files.readString(file)
+    assertContains(output, "versioned(\"2.4.*\")")
+    assertContains(output, "versioned(\">=2.4.20 <2.5.0\", \"\"\"")
+    assertContains(output, "version 2.4.21")
+  }
+
 }
