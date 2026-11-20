@@ -7,6 +7,7 @@ dependencies {
   implementation("org.jetbrains.kotlin:kotlin-compiler-embeddable:${libs.versions.kotlin.get()}")
   implementation(gradleTestKit())
   testImplementation(kotlin("test"))
+  testImplementation("com.google.devtools.ksp:symbol-processing-api:${libs.versions.ksp.get()}")
   testImplementation(libs.junit.jupiter)
   testRuntimeOnly(libs.junit.platform.launcher)
 }

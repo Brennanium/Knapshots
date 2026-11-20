@@ -15,6 +15,8 @@ import com.google.devtools.ksp.validate
 public class GreetingProcessorProvider : SymbolProcessorProvider {
   override fun create(environment: SymbolProcessorEnvironment): SymbolProcessor = GreetingProcessor(
     environment.codeGenerator, environment.logger, environment.options["fixture.warning"] == "true",
+    environment.options["fixture.secondRound"] == "true",
+    environment.options["fixture.resource"] == "true",
   )
 }
 
@@ -22,6 +24,8 @@ private class GreetingProcessor(
   private val code: CodeGenerator,
   private val logger: KSPLogger,
   private val warning: Boolean,
+  private val secondRound: Boolean,
+  private val resource: Boolean,
 ) : SymbolProcessor {
   private val generated = mutableSetOf<String>()
   override fun process(resolver: Resolver): List<KSAnnotated> {
@@ -37,6 +41,16 @@ private class GreetingProcessor(
       val file = requireNotNull(declaration.containingFile)
       code.createNewFile(Dependencies(false, file), packageName, "${name}Greeting").bufferedWriter().use {
         it.write("package $packageName\n\nobject ${name}Greeting {\n  fun greet(): String = \"Hello, $name!\"\n}\n")
+      }
+      if (resource) {
+        code.createNewFile(Dependencies(false, file), packageName, "${name}Metadata", "txt").bufferedWriter().use {
+          it.write("metadata for $name\n")
+        }
+      }
+      if (secondRound && name == "Example") {
+        code.createNewFile(Dependencies(false, file), packageName, "FollowUp").bufferedWriter().use {
+          it.write("package $packageName\n\n@AddGreeting class FollowUp\n")
+        }
       }
     }
     return deferred

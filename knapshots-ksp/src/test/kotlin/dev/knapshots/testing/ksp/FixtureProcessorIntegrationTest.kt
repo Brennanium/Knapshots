@@ -7,9 +7,11 @@ import dev.knapshots.testing.compiler.snapshot
 import java.nio.file.Files
 import java.nio.file.Path
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.io.TempDir
 import kotlin.test.assertContains
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 /** Integration coverage against a real test-only KSP processor. */
 class FixtureProcessorIntegrationTest {
@@ -73,5 +75,159 @@ class FixtureProcessorIntegrationTest {
     val use = "package fixture\nfun main() { check(ExampleGreeting.greet() == \"Hello, Example!\") }"
     assertKsp(definition, version, host, generated = SnapshotExpectation(generated),
       additionalSources = listOf(KspSource("Use.kt", use)), mainClass = "fixture.UseKt")
+  }
+  @Test fun `multiple annotated classes generate independent source files`() {
+    assertKsp("""
+      package fixture
+      annotation class AddGreeting
+      @AddGreeting class First
+      @AddGreeting class Second
+      fun main() {
+        check(FirstGreeting.greet() == "Hello, First!")
+        check(SecondGreeting.greet() == "Hello, Second!")
+      }
+    """, version, host, generated = SnapshotExpectation("""
+      // FILE: kotlin/fixture/FirstGreeting.kt
+      package fixture
+
+      object FirstGreeting {
+        fun greet(): String = "Hello, First!"
+      }
+
+      // FILE: kotlin/fixture/SecondGreeting.kt
+      package fixture
+
+      object SecondGreeting {
+        fun greet(): String = "Hello, Second!"
+      }
+    """), mainClass = "fixture.MainKt")
+  }
+
+  @Test fun `mismatched generated source does not pass`() {
+    assertFailsWith<AssertionError> {
+      assertKsp(source, version, host, generated = SnapshotExpectation("wrong output"))
+    }
+  }
+  @Test fun `version-specific source snapshots apply to a real processor`() {
+    assertKsp(source, version, host, generated = SnapshotExpectation(
+      "incorrect default", versions = mapOf(version.substringBeforeLast('.') + ".*" to generated),
+    ))
+  }
+
+  @Test fun `execution failure is distinct from processor and compiler success`() {
+    val input = source.replace("Hello, Example!", "unexpected greeting")
+    assertKsp(input, version, host, mainClass = "fixture.MainKt", executionSucceeds = false)
+  }
+
+  @Test fun `reports multiple processor errors at their source locations`() {
+    assertKsp("""
+      package fixture
+      @Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION) annotation class AddGreeting
+      @AddGreeting fun first() = Unit
+      @AddGreeting fun second() = Unit
+    """, version, host, succeeds = false, expectedDiagnostics = listOf(
+      KspDiagnosticExpectation(KspDiagnosticSeverity.ERROR, "@AddGreeting requires a class", file = "src/main/kotlin/Main.kt", line = 3),
+      KspDiagnosticExpectation(KspDiagnosticSeverity.ERROR, "@AddGreeting requires a class", file = "src/main/kotlin/Main.kt", line = 4),
+    ))
+  }
+  @Test fun `annotation from a compiled dependency is visible to the processor`() {
+    val annotations = KspDependency("annotations", listOf(KspSource("Annotations.kt", "package fixture\nannotation class AddGreeting")))
+    assertKsp("""
+      package fixture
+      @AddGreeting class Example
+      fun main() { check(ExampleGreeting.greet() == "Hello, Example!") }
+    """, version, host, dependencies = listOf(annotations), generated = SnapshotExpectation(generated),
+      mainClass = "fixture.MainKt")
+  }
+
+  @Test fun `records version-specific output from the real processor`(@TempDir directory: Path) {
+    val file = directory.resolve("VersionedFixtureTest.kt")
+    Files.writeString(file, "fun test() {\n  assertKsp(source = \"example\", generated = SnapshotExpectation(\"shared\"))\n}\n")
+    val failure = assertFailsWith<AssertionError> {
+      assertKsp(source, version, host, generated = SnapshotExpectation("shared"),
+        record = SnapshotRecording.MISSING, recordVersion = true, location = InlineSnapshotLocation(file, 2))
+    }
+    assertContains(failure.message.orEmpty(), "review and rerun")
+    val recorded = Files.readString(file)
+    assertContains(recorded, "shared")
+    assertContains(recorded, "\"$version\" to")
+    assertContains(recorded, "object ExampleGreeting")
+  }
+  @Test fun `captures generated sources from subsequent KSP rounds`() {
+    val multiRound = GradleKspHost(kspVersion, listOf(plugin), processorOptions = mapOf("fixture.secondRound" to "true"))
+    val input = source.replace(
+      "fun main() { check(ExampleGreeting.greet() == \"Hello, Example!\") }",
+      "fun main() { check(ExampleGreeting.greet() == \"Hello, Example!\"); check(FollowUpGreeting.greet() == \"Hello, FollowUp!\") }",
+    )
+    assertKsp(input, version, multiRound, generated = SnapshotExpectation("""
+      // FILE: kotlin/fixture/ExampleGreeting.kt
+      package fixture
+
+      object ExampleGreeting {
+        fun greet(): String = "Hello, Example!"
+      }
+
+      // FILE: kotlin/fixture/FollowUp.kt
+      package fixture
+
+      @AddGreeting class FollowUp
+
+      // FILE: kotlin/fixture/FollowUpGreeting.kt
+      package fixture
+
+      object FollowUpGreeting {
+        fun greet(): String = "Hello, FollowUp!"
+      }
+    """), mainClass = "fixture.MainKt")
+  }
+  @Test fun `multiple processors contribute generated files`() {
+    val kspApi = Path.of(com.google.devtools.ksp.processing.SymbolProcessorProvider::class.java.protectionDomain.codeSource.location.toURI())
+    val multiProcessor = GradleKspHost(kspVersion, listOf(plugin, kspApi))
+    val second = KspProcessorProject(
+      name = "otherProcessor",
+      providers = listOf("second.SecondProvider"),
+      sources = listOf(KspSource("SecondProcessor.kt", """
+        package second
+        import com.google.devtools.ksp.processing.*
+        import com.google.devtools.ksp.symbol.KSAnnotated
+        class SecondProvider : SymbolProcessorProvider {
+          override fun create(environment: SymbolProcessorEnvironment): SymbolProcessor = object : SymbolProcessor {
+            var wrote = false
+            override fun process(resolver: Resolver): List<KSAnnotated> {
+              if (!wrote) {
+                wrote = true
+                environment.codeGenerator.createNewFile(Dependencies(false), "fixture", "Extra").bufferedWriter().use {
+                  it.write("package fixture\nobject Extra { const val value = 42 }\n")
+                }
+              }
+              return emptyList()
+            }
+          }
+        }
+      """)),
+    )
+    val input = source.replace(
+      "fun main() { check(ExampleGreeting.greet() == \"Hello, Example!\") }",
+      "fun main() { check(ExampleGreeting.greet() == \"Hello, Example!\"); check(Extra.value == 42) }",
+    )
+    assertKsp(input, version, multiProcessor, processorProjects = listOf(second), generated = SnapshotExpectation("""
+      // FILE: kotlin/fixture/ExampleGreeting.kt
+      package fixture
+
+      object ExampleGreeting {
+        fun greet(): String = "Hello, Example!"
+      }
+
+      // FILE: kotlin/fixture/Extra.kt
+      package fixture
+      object Extra { const val value = 42 }
+    """), mainClass = "fixture.MainKt")
+  }
+  @Disabled("GradleKspHost currently captures Kotlin and Java source files, not generated resources")
+  @Test fun `generated resources are included in processor output`() {
+    val resourceHost = GradleKspHost(kspVersion, listOf(plugin), processorOptions = mapOf("fixture.resource" to "true"))
+    val result = resourceHost.process(KspRequest(listOf(KspSource("Main.kt", source)), version))
+    assertTrue(result.succeeded, result.output)
+    assertTrue(result.generatedFiles.any { (path, content) -> path.endsWith("ExampleMetadata.txt") && content == "metadata for Example\n" })
   }
 }
