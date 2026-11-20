@@ -104,6 +104,38 @@ class EditorCompatibilityPluginTest {
       .withArguments("inspectTestConfiguration").build()
   }
 
+  @Test fun `editor recording configures an isolated worker classpath`(@TempDir dir: Path) {
+    val sourceRoot = checkNotNull(System.getProperty("knapshots.sourceRoot")).replace("\\", "/")
+    Files.writeString(dir.resolve("settings.gradle.kts"), """
+      pluginManagement { repositories { gradlePluginPortal(); mavenCentral() } }
+      dependencyResolutionManagement { repositories { mavenCentral() } }
+      rootProject.name = "consumer"
+      includeBuild("$sourceRoot")
+    """.trimIndent())
+    Files.writeString(dir.resolve("build.gradle.kts"), """
+      plugins { java; id("dev.knapshots.compatibility") }
+      dependencies { testImplementation("dev.knapshots:knapshots-editor:0.1.0-SNAPSHOT") }
+      knapshots { recording.set("missing") }
+      tasks.register("probe") { doLast {
+        val args = tasks.named<Test>("test").get().jvmArgumentProviders.flatMap { it.asArguments() }
+        check("-Dknapshots.editor.record=missing" in args)
+        val worker = args.single { it.startsWith("-Dknapshots.editor.recorderClasspath=") }
+        check(worker.contains("knapshots-compiler"))
+        check(worker.contains("kotlin-compiler-embeddable"))
+        println("ISOLATED_RECORDER_CONFIGURED")
+      } }
+    """.trimIndent())
+    val result = GradleRunner.create().withProjectDir(dir.toFile()).withPluginClasspath().withArguments("probe").build()
+    assertContains(result.output, "ISOLATED_RECORDER_CONFIGURED")
+    val javaSource = dir.resolve("src/test/java/example/Example.java")
+    Files.createDirectories(javaSource.parent)
+    Files.writeString(javaSource, "package example; public class Example {}")
+    Files.writeString(dir.resolve("build.gradle.kts"), Files.readString(dir.resolve("build.gradle.kts")) + "\ntasks.test { failOnNoDiscoveredTests = false }\n")
+    val cachedRunner = GradleRunner.create().withProjectDir(dir.toFile()).withPluginClasspath().withArguments("test", "--configuration-cache")
+    cachedRunner.build()
+    assertContains(cachedRunner.build().output, "Configuration cache entry reused")
+  }
+
   @Test fun `selects release validates local IDE and invokes driver`(@TempDir dir: Path) {
     Files.writeString(dir.resolve("settings.gradle.kts"), "rootProject.name = \"consumer\"")
     val ide = dir.resolve("studio")

@@ -97,6 +97,49 @@ class KotlinEditorFixtureTest : EditorFixtureTestCase() {
     }
   }
 
+  fun testRecordsSourceDiagnosticSnapshotFromPlugin() {
+    installFixturePlugin()
+    val file = java.nio.file.Files.createTempFile("knapshots-editor-record", ".kt")
+    val previous = System.getProperty("knapshots.editor.record")
+    try {
+      java.nio.file.Files.writeString(file, "fun test() {\n  sourceDiagnosticsSnapshot()\n}\n")
+      System.setProperty("knapshots.editor.record", "missing")
+      try {
+        assertEditor(fileName = "Rejected.kt", source = "package fixture\nannotation class Reject\n@Reject class Disallowed") {
+          sourceDiagnosticsSnapshot(location = dev.knapshots.testing.editor.EditorSnapshotLocation(file, 2))
+        }
+        fail("Recording must fail the test for review")
+      } catch (error: AssertionError) {
+        assertTrue(error.message.orEmpty().contains("Recorded editor diagnostics"))
+      }
+      val recorded = java.nio.file.Files.readString(file)
+      assertTrue(recorded.contains("@Reject class Disallowed"))
+      assertTrue(recorded.contains("error: [REJECTED] Fixture rejects Disallowed"))
+      assertTrue(recorded.contains("sourceDiagnosticsSnapshot(\"\"\""))
+    } finally {
+      if (previous == null) System.clearProperty("knapshots.editor.record") else System.setProperty("knapshots.editor.record", previous)
+      java.nio.file.Files.deleteIfExists(file)
+    }
+  }
+
+  fun testIsolatedRecordingWorkerDoesNotDisruptIde() {
+    val file = java.nio.file.Files.createTempFile("knapshots-ide-recorder", ".kt")
+    try {
+      val original = "fun test() {\n  assertCompiler(source = \"example\", fir = snapshot())\n}\n"
+      java.nio.file.Files.writeString(file, original)
+      val classpath = checkNotNull(System.getProperty("knapshots.fixtureRecorderClasspath"))
+        .split(java.io.File.pathSeparator).map(java.nio.file.Path::of)
+      dev.knapshots.testing.snapshot.IsolatedSnapshotRecorder(classpath).use { worker ->
+        worker.record(file, 2, "assertCompiler", mapOf("fir" to "recorded from an isolated worker"), original)
+      }
+      assertTrue(java.nio.file.Files.readString(file).contains("recorded from an isolated worker"))
+      myFixture.configureByText("AfterRecording.kt", "class Example")
+      assertFalse(myFixture.doHighlighting().any { it.severity == com.intellij.lang.annotation.HighlightSeverity.ERROR })
+    } finally {
+      java.nio.file.Files.deleteIfExists(file)
+    }
+  }
+
   fun testPluginWarningAppearsInEditorDiagnostics() {
     installFixturePlugin()
     assertEditor(fileName = "Caution.kt", source = """

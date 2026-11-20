@@ -86,7 +86,7 @@ assertEditor("val result = missing") {
 }
 ```
 
-The expected text is written manually for now. Rendering uses the line and column supplied by the IDE host; diagnostics without source positions are listed separately. Exact diagnostic text varies between IDEs and plugins. Inline recording and version-specific editor snapshots remain future work.
+Start with `sourceDiagnosticsSnapshot()` and enable recording with `knapshots { recording.set("missing") }` or `-Pknapshots.recording=missing`. Knapshots writes the observed text into the test, then fails so you can review it and rerun. Recording uses an isolated worker process to keep the Kotlin compiler off the IDE classpath. Rendering uses the line and column supplied by the IDE host; diagnostics without source positions are listed separately. Exact diagnostic text varies between IDEs and plugins. Version-specific editor snapshots remain future work.
 
 The [compatibility guide](COMPATIBILITY.md#editor-assertions-in-junit) describes the experimental Gradle settings and what is currently inferred. The adapter has not been published; a local archive or the existing checkout-based launcher is still needed. Other IDE plugin mechanisms require their own integration; enabling KEFS is not a requirement for compiler assertions.
 

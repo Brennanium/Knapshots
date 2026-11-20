@@ -71,9 +71,11 @@ public abstract class KnapshotsExtension @Inject constructor(objects: ObjectFact
 internal class EditorProjectArguments(
   config: KnapshotsExtension,
   @get:Classpath val testClasspath: FileCollection,
+  @get:Classpath val recorderClasspath: FileCollection,
 ) : CommandLineArgumentProvider {
   // Keep only Gradle providers, not the decorated extension or its owning project.
   @get:Internal val editorValues = mapOf(
+    "record" to config.recording,
     "runnerRoot" to config.runnerRoot.map { it.asFile.absolutePath },
     "wrapperRoot" to config.wrapperRoot.map { it.asFile.absolutePath },
     "adapterArchive" to config.adapterArchive.map { it.asFile.absolutePath },
@@ -110,6 +112,9 @@ internal class EditorProjectArguments(
     val classpathArgs = if (classpath.isEmpty()) emptyList() else listOf(
       "-Dknapshots.editor.classpath=$classpath", "-Dknapshots.compiler.classpath=$classpath",
     )
-    return configurationArguments + classpathArgs
+    val recorderArgs = if (recorderClasspath.files.isNotEmpty()) listOf(
+      "-Dknapshots.editor.recorderClasspath=" + recorderClasspath.files.joinToString(java.io.File.pathSeparator) { it.absolutePath },
+    ) else emptyList()
+    return configurationArguments + classpathArgs + recorderArgs
   }
 }

@@ -48,6 +48,15 @@ public abstract class CompatibilityExtension {
 
 public class KnapshotsCompatibilityPlugin : Plugin<Project> {
   override fun apply(project: Project) {
+    val versionProperties = java.util.Properties().apply {
+      KnapshotsCompatibilityPlugin::class.java.getResourceAsStream("/dev/knapshots/gradle/version.properties")!!.use(::load)
+    }
+    val recorder = project.configurations.create("knapshotsEditorRecorder") {
+      it.isCanBeConsumed = false
+      it.defaultDependencies { dependencies ->
+        dependencies.add(project.dependencies.create("dev.knapshots:knapshots-compiler:${versionProperties.getProperty("version")}"))
+      }
+    }
     val editorProject = project.extensions.create("knapshots", KnapshotsExtension::class.java)
     editorProject.recording.convention(project.providers.gradleProperty("knapshots.recording"))
     editorProject.recordCompilerVersion.convention(project.providers.gradleProperty("knapshots.recordCompilerVersion").map { it.toBooleanStrict() })
@@ -69,8 +78,13 @@ public class KnapshotsCompatibilityPlugin : Plugin<Project> {
           compilerPluginId(plugin)?.let { editorProject.compilerPlugin.id.convention(it) }
         }
       }
+      val editorDeclared = project.configurations.findByName("testRuntimeClasspath")?.allDependencies?.any {
+        it.group == "dev.knapshots" && it.name.startsWith("knapshots-editor")
+      } == true
+      val recordingEnabled = editorProject.recording.orNull?.lowercase(java.util.Locale.ROOT)?.let { it != "none" } == true
+      val recordingFiles = if (editorDeclared && recordingEnabled) project.files(recorder) else project.files()
       project.tasks.withType(Test::class.java).configureEach { task ->
-        task.jvmArgumentProviders.add(EditorProjectArguments(editorProject, task.classpath))
+        task.jvmArgumentProviders.add(EditorProjectArguments(editorProject, task.classpath, recordingFiles))
       }
     }
     editorProject.runnerRoot.convention(project.layout.dir(project.providers.gradleProperty("knapshots.ideRunnerRoot").map(::File)))

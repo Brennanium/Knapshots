@@ -36,13 +36,19 @@ val ideFixturePluginJar = tasks.register<Jar>("ideFixturePluginJar") {
   from(ideFixturePlugin.output)
 }
 val buildFixturePlugin = gradle.includedBuild("Knapshots").task(":knapshots-test-compiler-plugin:jar")
+val isolatedRecorder = configurations.create("isolatedRecorder")
 val ideKotlinStdlib = configurations.create("ideKotlinStdlib") { isTransitive = false }
-dependencies { ideKotlinStdlib("org.jetbrains.kotlin:kotlin-stdlib:2.4.21") }
+dependencies {
+  ideKotlinStdlib("org.jetbrains.kotlin:kotlin-stdlib:2.4.21")
+  isolatedRecorder("dev.knapshots:knapshots-compiler:0.1.0-SNAPSHOT")
+}
 tasks.test {
   dependsOn(buildFixturePlugin, ideFixturePluginJar)
   val buildPlugin = file("../knapshots-test-compiler-plugin/build/libs/knapshots-test-compiler-plugin-0.1.0-SNAPSHOT.jar")
   inputs.file(buildPlugin)
   inputs.file(ideFixturePluginJar.flatMap { it.archiveFile })
+  systemProperty("knapshots.fixtureRecorderClasspath", isolatedRecorder.asPath)
+  systemProperty("knapshots.editor.recorderClasspath", isolatedRecorder.asPath)
   systemProperty("knapshots.fixtureKotlinStdlib", ideKotlinStdlib.singleFile.absolutePath)
   systemProperty("knapshots.fixtureBuildPlugin", buildPlugin.absolutePath)
   systemProperty("knapshots.fixtureIdePlugin", ideFixturePluginJar.flatMap { it.archiveFile }.get().asFile.absolutePath)

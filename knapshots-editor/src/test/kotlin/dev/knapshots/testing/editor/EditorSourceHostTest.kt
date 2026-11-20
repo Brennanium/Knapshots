@@ -1,6 +1,10 @@
 package dev.knapshots.testing.editor
 
 import org.junit.jupiter.api.Test
+import java.nio.file.Files
+import java.nio.file.Path
+import org.junit.jupiter.api.io.TempDir
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
@@ -69,6 +73,33 @@ class EditorSourceHostTest {
     assertFailsWith<AssertionError> { assertEditor("val x = missing", host) { sourceDiagnosticsSnapshot("") } }
     assertFailsWith<IllegalStateException> {
       assertEditor("val x = missing", host) { sourceDiagnosticsSnapshot(""); diagnostics { error("Unresolved") } }
+    }
+  }
+
+  @Test fun `records source diagnostics in an isolated worker`(@TempDir directory: Path) {
+    val file = directory.resolve("SnapshotTest.kt")
+    val original = "fun test() {\n  sourceDiagnosticsSnapshot()\n}\n"
+    Files.writeString(file, original)
+    val host = EditorSourceHost {
+      object : EditorObservations {
+        override fun diagnostics() = listOf(EditorDiagnostic(DiagnosticSeverity.ERROR, "Unresolved reference", "Test.kt:1:9"))
+        override fun reference(expression: String) = ReferenceObservation.Unresolved
+      }
+    }
+    val previous = System.getProperty("knapshots.editor.record")
+    try {
+      System.setProperty("knapshots.editor.record", "missing")
+      val error = assertFailsWith<AssertionError> {
+        assertEditor("val x = missing", host) { sourceDiagnosticsSnapshot(location = EditorSnapshotLocation(file, 2)) }
+      }
+      assertContains(error.message.orEmpty(), "Recorded editor diagnostics")
+      val recorded = Files.readString(file)
+      assertContains(recorded, "val x = missing")
+      assertContains(recorded, "error: Unresolved reference")
+      System.setProperty("knapshots.editor.record", "none")
+      assertEditor("val x = missing", host) { sourceDiagnosticsSnapshot("val x = missing\n        ^\nerror: Unresolved reference") }
+    } finally {
+      if (previous == null) System.clearProperty("knapshots.editor.record") else System.setProperty("knapshots.editor.record", previous)
     }
   }
 

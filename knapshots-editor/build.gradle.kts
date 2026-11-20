@@ -2,7 +2,10 @@ plugins {
   alias(libs.plugins.kotlin.jvm)
 }
 
+val recorderTestClasspath = configurations.create("recorderTestClasspath")
+
 dependencies {
+  recorderTestClasspath(project(":knapshots-compiler"))
   api(project(":knapshots-snapshots"))
   testImplementation(kotlin("test"))
   testImplementation(libs.junit.jupiter)
@@ -10,5 +13,7 @@ dependencies {
 }
 
 tasks.test {
+  dependsOn(":knapshots-compiler:jar")
+  systemProperty("knapshots.editor.recorderClasspath", recorderTestClasspath.asPath)
   useJUnitPlatform()
 }

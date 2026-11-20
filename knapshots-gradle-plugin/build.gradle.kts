@@ -20,4 +20,13 @@ gradlePlugin {
   }
 }
 
-tasks.test { useJUnitPlatform() }
+val knapshotsVersion = project.version.toString()
+tasks.processResources {
+  inputs.property("knapshotsVersion", knapshotsVersion)
+  expand(mapOf("knapshotsVersion" to knapshotsVersion))
+}
+
+tasks.test {
+  systemProperty("knapshots.sourceRoot", rootProject.projectDir.absolutePath)
+  useJUnitPlatform()
+}

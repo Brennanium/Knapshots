@@ -54,11 +54,13 @@ public class EditorExpectations internal constructor(
   private val references = mutableListOf<ReferenceExpectation>()
   private var expectedDiagnosticSnapshot: String? = null
   private var expectedSourceDiagnosticSnapshot: String? = null
+  private var hasSourceDiagnosticSnapshot = false
+  private var sourceSnapshotLocation: EditorSnapshotLocation? = null
   private var hasDiagnosticBlock = false
 
   public fun diagnostics(block: DiagnosticExpectations.() -> Unit) {
     check(checkDiagnostics) { "Diagnostic checking is disabled for this editor assertion." }
-    check(expectedDiagnosticSnapshot == null && expectedSourceDiagnosticSnapshot == null) { "Diagnostic snapshots and individual diagnostic expectations cannot be combined." }
+    check(expectedDiagnosticSnapshot == null && !hasSourceDiagnosticSnapshot) { "Diagnostic snapshots and individual diagnostic expectations cannot be combined." }
     hasDiagnosticBlock = true
     DiagnosticExpectations(expectedDiagnostics).apply(block)
   }
@@ -66,19 +68,21 @@ public class EditorExpectations internal constructor(
   /** Compare all captured diagnostics as text, including warnings. Recording is not yet supported. */
   public fun diagnosticsSnapshot(expected: String) {
     check(checkDiagnostics) { "Diagnostic checking is disabled for this editor assertion." }
-    check(expectedDiagnosticSnapshot == null && expectedSourceDiagnosticSnapshot == null && !hasDiagnosticBlock) {
+    check(expectedDiagnosticSnapshot == null && !hasSourceDiagnosticSnapshot && !hasDiagnosticBlock) {
       "Diagnostic snapshots and individual diagnostic expectations cannot be combined or repeated."
     }
     expectedDiagnosticSnapshot = expected.trimIndent().trimEnd('\n', '\r')
   }
 
   /** Compare diagnostics in source context; requires a source-hosted assertion. */
-  public fun sourceDiagnosticsSnapshot(expected: String) {
+  public fun sourceDiagnosticsSnapshot(expected: String? = null, location: EditorSnapshotLocation? = null) {
     check(checkDiagnostics) { "Diagnostic checking is disabled for this editor assertion." }
-    check(expectedDiagnosticSnapshot == null && expectedSourceDiagnosticSnapshot == null && !hasDiagnosticBlock) {
+    check(expectedDiagnosticSnapshot == null && !hasSourceDiagnosticSnapshot && !hasDiagnosticBlock) {
       "Diagnostic snapshots and individual diagnostic expectations cannot be combined or repeated."
     }
-    expectedSourceDiagnosticSnapshot = expected.trimIndent().trimEnd('\n', '\r')
+    hasSourceDiagnosticSnapshot = true
+    expectedSourceDiagnosticSnapshot = expected?.trimIndent()?.trimEnd('\n', '\r')
+    if (editorRecordingMode() != "none") sourceSnapshotLocation = location ?: discoverEditorSnapshotLocation()
   }
 
   public fun reference(expression: String): ReferenceExpectation {
@@ -90,7 +94,6 @@ public class EditorExpectations internal constructor(
 
   internal fun verify(observations: EditorObservations, sources: List<EditorSource>? = null) {
     val failures = mutableListOf<String>()
-    if (checkDiagnostics) verifyDiagnostics(observations, failures, sources)
     for (expected in references) {
       val shouldResolve = expected.shouldResolve
       if (shouldResolve == null) {
@@ -104,13 +107,15 @@ public class EditorExpectations internal constructor(
       }
     }
     if (failures.isNotEmpty()) throw AssertionError(failures.joinToString("\n", prefix = "Editor assertions failed:\n"))
+    if (checkDiagnostics) verifyDiagnostics(observations, failures, sources)
+    if (failures.isNotEmpty()) throw AssertionError(failures.joinToString("\n", prefix = "Editor assertions failed:\n"))
   }
 
   private fun verifyDiagnostics(observations: EditorObservations, failures: MutableList<String>, sources: List<EditorSource>?) {
     val actual = observations.diagnostics()
     val expectedSnapshot = expectedDiagnosticSnapshot
     val sourceSnapshot = expectedSourceDiagnosticSnapshot
-    if (sourceSnapshot != null) {
+    if (hasSourceDiagnosticSnapshot) {
       checkNotNull(sources) { "Source diagnostic snapshots require a source-hosted assertEditor." }
       val rendered = renderSourceDiagnostics(sources.map { DiagnosticSource(it.fileName, it.text) }, actual.map { diagnostic ->
         val match = diagnostic.location?.replace('\\', '/')?.let { Regex("^(.*):(\\d+):(\\d+)$").matchEntire(it) }
@@ -119,7 +124,20 @@ public class EditorExpectations internal constructor(
           match?.groupValues?.get(2)?.toIntOrNull() ?: lineOnly?.groupValues?.get(2)?.toIntOrNull(),
           match?.groupValues?.get(3)?.toIntOrNull(), diagnostic.location)
       })
-      val difference = compareSnapshot(rendered, sourceSnapshot, textSnapshotting)
+      val difference = sourceSnapshot?.let { compareSnapshot(rendered, it, textSnapshotting) }
+      val shouldRecord = when (editorRecordingMode()) {
+        "none" -> false
+        "missing" -> sourceSnapshot == null
+        "failed" -> sourceSnapshot == null || difference != null
+        "all" -> true
+        else -> error("Invalid editor snapshot recording mode.")
+      }
+      if (shouldRecord) {
+        val location = checkNotNull(sourceSnapshotLocation)
+        recordEditorSnapshot(location, rendered)
+        throw AssertionError("Recorded editor diagnostics at ${location.file}:${location.line}; review and rerun the test.")
+      }
+      checkNotNull(sourceSnapshot) { "Missing source diagnostic snapshot; enable recording to insert it." }
       if (difference != null) failures += "Source diagnostic snapshot differs:\nExpected:\n${difference.expected}\nActual:\n${difference.actual}"
     } else if (expectedSnapshot != null) {
       val difference = compareSnapshot(actual, expectedSnapshot, diagnosticSnapshotting)
