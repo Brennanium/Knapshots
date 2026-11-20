@@ -7,6 +7,9 @@ import dev.knapshots.testing.compiler.renderCompilerDiagnostics
 import dev.knapshots.testing.compiler.InlineSnapshotLocation
 import dev.knapshots.testing.compiler.InlineSnapshotUpdate
 import dev.knapshots.testing.compiler.recordInlineSnapshotBatch
+import dev.knapshots.testing.compiler.deferredInlineSnapshotLocation
+import dev.knapshots.testing.compiler.VersionedSnapshotExpectations
+import dev.knapshots.testing.compiler.selectCompilerVersion
 import dev.knapshots.testing.compiler.SnapshotExpectation
 import dev.knapshots.testing.compiler.SnapshotRecording
 import dev.knapshots.testing.compiler.discoverInlineSnapshotLocation
@@ -28,7 +31,13 @@ public data class KspResult(val succeeded: Boolean, val generatedFiles: Map<Stri
 public fun interface KspHost { public fun process(request: KspRequest): KspResult }
 
 /** Expectations supplied in the trailing assertion block. */
-public class KspExpectations internal constructor(private val recording: SnapshotRecording, private val recordVersion: Boolean) {
+public class KspExpectations internal constructor(private val recording: SnapshotRecording, private val recordVersion: Boolean, private val compilerVersion: String) {
+  private val versionBranches = linkedMapOf<String, KspExpectations.() -> Unit>()
+  private var defaultBranch = false
+  private var isBranch = false
+  internal var generatedCall = "generated"
+  private var generatedTarget: (() -> InlineSnapshotLocation)? = null
+  private var diagnosticTarget: (() -> InlineSnapshotLocation)? = null
   internal var outcome: Boolean? = null
   internal var hasGenerated = false
   internal var expectedGenerated: SnapshotExpectation? = null
@@ -42,18 +51,59 @@ public class KspExpectations internal constructor(private val recording: Snapsho
   internal var snapshotCall: String = "snapshot"
   internal var originalSource: String? = null
 
+  public fun default(block: KspExpectations.() -> Unit) {
+    check(!isBranch && !defaultBranch) { "Only one default block is allowed." }
+    defaultBranch = true
+    block()
+  }
+  public fun versioned(selector: String, block: KspExpectations.() -> Unit) {
+    check(!isBranch) { "Version blocks cannot be nested." }
+    check(selector !in versionBranches) { "Duplicate version selector: $selector." }
+    versionBranches[selector] = block
+  }
+  internal fun resolveVersions(): KspExpectations {
+    if (versionBranches.isEmpty()) return this
+    val selected = selectCompilerVersion(versionBranches.keys, compilerVersion) ?: return this
+    val branch = KspExpectations(recording, recordVersion, compilerVersion).also { it.isBranch = true }.apply(versionBranches.getValue(selected))
+    branch.outcome?.let { outcome = it }
+    if (branch.hasGenerated) {
+      hasGenerated = true; expectedGenerated = branch.expectedGenerated; generatedLocation = branch.generatedLocation
+      generatedOriginal = branch.generatedOriginal; generatedCall = branch.generatedCall; generatedTarget = branch.generatedTarget
+    }
+    if (branch.hasDiagnosticBlock) {
+      hasDiagnosticBlock = true; hasDiagnosticSnapshot = branch.hasDiagnosticSnapshot
+      expectedSnapshot = branch.expectedSnapshot; snapshotLocation = branch.snapshotLocation
+      snapshotCall = branch.snapshotCall; originalSource = branch.originalSource; diagnosticTarget = branch.diagnosticTarget
+      diagnosticItems.clear(); diagnosticItems.addAll(branch.diagnosticItems)
+    }
+    return this
+  }
+  internal fun prepareRecordingTargets(): KspExpectations {
+    generatedTarget?.let { generatedLocation = it(); generatedOriginal = Files.readString(checkNotNull(generatedLocation).file) }
+    diagnosticTarget?.let { snapshotLocation = it(); originalSource = Files.readString(checkNotNull(snapshotLocation).file) }
+    return this
+  }
   public fun succeeds() { check(outcome == null) { "Compilation outcome can only be specified once." }; outcome = true }
   public fun fails() { check(outcome == null) { "Compilation outcome can only be specified once." }; outcome = false }
   /** Compare or record the processor's generated source files. */
   public fun generated(expected: String? = null, location: InlineSnapshotLocation? = null) = configureGenerated(expected?.let(::SnapshotExpectation), location)
   public fun generated(expected: SnapshotExpectation, location: InlineSnapshotLocation? = null) = configureGenerated(expected, location)
+  public fun generated(block: VersionedSnapshotExpectations.() -> Unit) {
+    val entry = VersionedSnapshotExpectations().apply(block).selected(compilerVersion)
+    check(!hasGenerated) { "Generated output can only be specified once." }
+    hasGenerated = true
+    expectedGenerated = entry.expected?.let(::SnapshotExpectation)
+    generatedCall = entry.call
+    if (dev.knapshots.testing.snapshot.mayRecordSnapshot(recording, entry.expected == null, false)) {
+      generatedTarget = { entry.recordingLocation() }
+    }
+  }
   private fun configureGenerated(expected: SnapshotExpectation?, location: InlineSnapshotLocation?) {
     check(!hasGenerated) { "Generated output can only be specified once." }
     hasGenerated = true
     expectedGenerated = expected
     if (dev.knapshots.testing.snapshot.mayRecordSnapshot(recording, expected == null || expected.missing, recordVersion)) {
-      generatedLocation = location ?: discoverInlineSnapshotLocation()
-      generatedOriginal = Files.readString(checkNotNull(generatedLocation).file)
+      generatedTarget = deferredInlineSnapshotLocation(location)
     }
   }
   /** Record a diagnostic snapshot, expanding to a diagnostics block. */
@@ -64,23 +114,41 @@ public class KspExpectations internal constructor(private val recording: Snapsho
   public fun diagnostics(block: KspDiagnosticExpectations.() -> Unit) {
     check(!hasDiagnosticBlock) { "Diagnostics can only be specified once." }
     hasDiagnosticBlock = true
-    KspDiagnosticExpectations(diagnosticItems) { expected, location ->
+    KspDiagnosticExpectations(diagnosticItems, compilerVersion, { expected, location ->
       check(!hasDiagnosticSnapshot && diagnosticItems.isEmpty()) { "Diagnostic snapshots and individual expectations cannot be combined." }
       hasDiagnosticSnapshot = true
       expectedSnapshot = expected
       if (dev.knapshots.testing.snapshot.mayRecordSnapshot(recording, expected == null || expected.missing, recordVersion)) {
-        snapshotLocation = location ?: discoverInlineSnapshotLocation()
-        originalSource = Files.readString(checkNotNull(snapshotLocation).file)
+        diagnosticTarget = deferredInlineSnapshotLocation(location)
       }
-    }.apply(block)
+    }, { entry ->
+      check(!hasDiagnosticSnapshot && diagnosticItems.isEmpty()) { "Diagnostic snapshots and individual expectations cannot be combined." }
+      hasDiagnosticSnapshot = true
+      expectedSnapshot = entry.expected?.let(::SnapshotExpectation)
+      snapshotCall = entry.call
+      if (dev.knapshots.testing.snapshot.mayRecordSnapshot(recording, entry.expected == null, false)) {
+        diagnosticTarget = { entry.recordingLocation() }
+      }
+    }).apply(block).finish()
     check(!hasDiagnosticSnapshot || diagnosticItems.isEmpty()) { "Diagnostic snapshots and individual expectations cannot be combined." }
   }
 }
 
 public class KspDiagnosticExpectations internal constructor(
   private val expected: MutableList<KspDiagnosticExpectation>,
+  private val compilerVersion: String,
   private val recordSnapshot: (SnapshotExpectation?, InlineSnapshotLocation?) -> Unit,
+  private val recordVersioned: (VersionedSnapshotExpectations.Entry) -> Unit,
 ) {
+  private var versions: VersionedSnapshotExpectations? = null
+  public fun default(expected: String? = null, location: InlineSnapshotLocation? = null) {
+    (versions ?: VersionedSnapshotExpectations().also { versions = it }).default(expected, location)
+  }
+  public fun versioned(selector: String, expected: String? = null, location: InlineSnapshotLocation? = null) {
+    (versions ?: VersionedSnapshotExpectations().also { versions = it }).versioned(selector, expected, location)
+  }
+  internal fun finish() { versions?.let { recordVersioned(it.selected(compilerVersion)) } }
+
   public fun snapshot(expected: String? = null, location: InlineSnapshotLocation? = null) = recordSnapshot(expected?.let(::SnapshotExpectation), location)
   public fun snapshot(expected: SnapshotExpectation, location: InlineSnapshotLocation? = null) = recordSnapshot(expected, location)
   public fun error(messageContains: String, file: String? = null, line: Int? = null, column: Int? = null) =
@@ -117,7 +185,7 @@ public fun assertKsp(
   block: (KspExpectations.() -> Unit)? = null,
 ) {
   require(compilerVersion.isNotBlank()) { "A compiler version is required." }
-  val expectations = KspExpectations(record, recordVersion).also { if (block != null) it.block() }
+  val expectations = KspExpectations(record, recordVersion, compilerVersion).also { if (block != null) it.block() }.resolveVersions().prepareRecordingTargets()
   check(!expectations.hasGenerated || generated == null) { "Generated output cannot be specified both in the block and in a parameter." }
   check(!expectations.hasDiagnosticBlock || (expectedDiagnostics == null && diagnosticSnapshot == null && diagnostics.isEmpty())) {
     "The diagnostics block cannot be combined with diagnostic parameters."
@@ -195,20 +263,20 @@ public fun assertKsp(
   val generatedExpectation = if (expectations.hasGenerated) expectations.expectedGenerated ?: dev.knapshots.testing.compiler.snapshot() else null
   val generatedDifference = if (generatedExpectation != null && !generatedExpectation.missing)
     compareSnapshot(actual, trimSnapshotIndent(generatedExpectation.forVersion(compilerVersion)).trimEnd('\n', '\r'), textSnapshotting) else null
-  val recordGenerated = generatedExpectation != null && shouldRecordSnapshot(generatedExpectation, actual, compilerVersion, record, recordVersion)
+  val recordGenerated = generatedExpectation != null && shouldRecordSnapshot(generatedExpectation, actual, compilerVersion, record, if (expectations.generatedCall in setOf("default", "versioned")) false else recordVersion)
   val dslExpectation = if (expectations.hasDiagnosticSnapshot) expectations.expectedSnapshot ?: dev.knapshots.testing.compiler.snapshot() else null
   val dslDifference = if (dslExpectation != null && !dslExpectation.missing)
     compareSnapshot(checkNotNull(renderedDiagnostics), trimSnapshotIndent(dslExpectation.forVersion(compilerVersion)).trimEnd('\n', '\r'), textSnapshotting) else null
-  val recordDsl = dslExpectation != null && shouldRecordSnapshot(dslExpectation, checkNotNull(renderedDiagnostics), compilerVersion, record, recordVersion)
+  val recordDsl = dslExpectation != null && shouldRecordSnapshot(dslExpectation, checkNotNull(renderedDiagnostics), compilerVersion, record, if (expectations.snapshotCall in setOf("default", "versioned")) false else recordVersion)
   val inlineUpdates = mutableListOf<InlineSnapshotUpdate>()
   if (updates.isNotEmpty()) inlineUpdates += InlineSnapshotUpdate(checkNotNull(target), "assertKsp", updates, original)
-  if (recordGenerated) inlineUpdates += InlineSnapshotUpdate(checkNotNull(expectations.generatedLocation), "generated", mapOf("expected" to actual), expectations.generatedOriginal)
+  if (recordGenerated) inlineUpdates += InlineSnapshotUpdate(checkNotNull(expectations.generatedLocation), expectations.generatedCall, mapOf("expected" to actual), expectations.generatedOriginal)
   if (recordDsl) inlineUpdates += InlineSnapshotUpdate(checkNotNull(expectations.snapshotLocation), expectations.snapshotCall, mapOf("expected" to checkNotNull(renderedDiagnostics)), expectations.originalSource)
   if (inlineUpdates.isNotEmpty()) {
     try {
       if (inlineUpdates.size == 1) {
         val update = inlineUpdates.single()
-        recordInlineSnapshots(update.location, update.assertionName, update.values, compilerVersion, if (autoDiagnostics) false else recordVersion, update.expectedSource)
+        recordInlineSnapshots(update.location, update.assertionName, update.values, compilerVersion, if (autoDiagnostics || update.assertionName in setOf("default", "versioned")) false else recordVersion, update.expectedSource)
       } else recordInlineSnapshotBatch(inlineUpdates, compilerVersion, if (autoDiagnostics) false else recordVersion)
     } catch (error: Exception) {
       throw AssertionError("Could not record inline snapshots: ${error.message}", error)

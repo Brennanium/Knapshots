@@ -37,3 +37,23 @@ The built-in host uses temporary Gradle JVM projects, resolves the supplied Kotl
 The KPaths checkout includes real-processor integration tests when `-Pknapshots.checkout=/path/to/Knapshots` is set. They exercise generated source, processor diagnostics, binary dependencies, runtime execution, and a separately built processor project.
 
 Knapshots tests `assertKsp` against a [test-only processor](TEST-FIXTURES.md) in its own repository. It produces actual generated source and diagnostics without requiring a KPaths checkout.
+
+
+## Version-specific expectations
+
+KSP supports the same snapshot version selectors and placeholder recording as compiler assertions:
+
+```kotlin
+assertKsp(source) {
+  generated {
+    default()
+    versioned("2.5.*")
+  }
+  diagnostics {
+    default()
+    versioned("2.5.*")
+  }
+}
+```
+
+Only the placeholder matching the Kotlin version under test is recorded. A top-level `default { ... }` groups default expectations and `versioned("2.5.*") { ... }` overrides the generated output, diagnostics, or outcome individually. See [version-specific compiler expectations](PLUGIN-TESTING.md#expectations-for-different-kotlin-versions) for selection and recording rules. These selectors use the Kotlin compiler version, not the KSP processor version.

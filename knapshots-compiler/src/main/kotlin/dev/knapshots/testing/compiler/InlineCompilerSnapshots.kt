@@ -132,7 +132,7 @@ internal object InlineCompilerSnapshots {
         if (name in setOf("__generatedBlock", "__firBlock", "__irBlock", "__diagnosticsBlock")) continue
         val named = args.arguments.filter { it.getArgumentName()?.asName?.asString() == name }
         val positional = args.arguments.filter { it.getArgumentName() == null }
-        val special = assertionName in setOf("sourceDiagnosticsSnapshot", "snapshot", "generated", "fir", "ir", "bytecode") && name == "expected"
+        val special = assertionName in setOf("sourceDiagnosticsSnapshot", "snapshot", "generated", "fir", "ir", "bytecode", "default", "versioned") && name == "expected"
         val matches = if (named.isNotEmpty() || !special) named else {
           val first = positional.firstOrNull()?.getArgumentExpression()
           val second = positional.getOrNull(1)?.getArgumentExpression()
@@ -140,14 +140,24 @@ internal object InlineCompilerSnapshots {
             (first is KtCallExpression && first.calleeExpression?.text in setOf("snapshot", "SnapshotExpectation"))
           val secondIsExpectation = second is KtStringTemplateExpression ||
             (second is KtCallExpression && second.calleeExpression?.text in setOf("snapshot", "SnapshotExpectation"))
-          val index = if (assertionName == "snapshot" && !firstIsExpectation && secondIsExpectation) 1 else 0
+          val index = if (assertionName == "versioned" || (assertionName == "snapshot" && !firstIsExpectation && secondIsExpectation)) 1 else 0
           listOfNotNull(positional.getOrNull(index))
         }
         require(matches.size <= 1) { "More than one $name argument at $file:$line." }
         val argument = matches.singleOrNull()
         if (argument == null) {
           require(!versioned) { "Record the shared $name expectation before a version-specific one." }
-          if (assertionName in setOf("sourceDiagnosticsSnapshot", "snapshot", "generated", "fir", "ir", "bytecode") && name == "expected") {
+          if (assertionName == "versioned" && name == "expected") {
+            val selector = args.arguments.firstOrNull { it.getArgumentName()?.asName?.asString() == "selector" }
+              ?: positional.singleOrNull() ?: error("Expected one version selector.")
+            val namedArgument = args.arguments.firstOrNull { it !== selector && it.getArgumentName() != null }
+            if (namedArgument != null) {
+              edits += Triple(namedArgument.textRange.startOffset, namedArgument.textRange.startOffset, "expected = ${literal(value)}, ")
+            } else {
+              val label = if (selector.getArgumentName() != null) "expected = " else ""
+              edits += Triple(selector.textRange.endOffset, selector.textRange.endOffset, ", $label${literal(value)}")
+            }
+          } else if (assertionName in setOf("sourceDiagnosticsSnapshot", "snapshot", "generated", "fir", "ir", "bytecode", "default") && name == "expected") {
             val first = args.arguments.firstOrNull()
             val insert = first?.textRange?.startOffset ?: args.rightParenthesis?.textRange?.startOffset ?: error("Missing closing parenthesis.")
             val replacement = if (first == null) literal(value) else "expected = ${literal(value)}, "
@@ -156,7 +166,7 @@ internal object InlineCompilerSnapshots {
           continue
         }
         val rawExpression = argument.getArgumentExpression()
-        if (assertionName in setOf("sourceDiagnosticsSnapshot", "snapshot", "generated", "fir", "ir", "bytecode") && name == "expected" && rawExpression is KtStringTemplateExpression) {
+        if (assertionName in setOf("sourceDiagnosticsSnapshot", "snapshot", "generated", "fir", "ir", "bytecode", "default", "versioned") && name == "expected" && rawExpression is KtStringTemplateExpression) {
           require(!versioned) { "Version-specific recording requires a SnapshotExpectation." }
           setExpression(rawExpression, value)
           continue
@@ -262,7 +272,7 @@ internal object InlineCompilerSnapshots {
       if (previous != null) histories[stageKey] = SourceHistory(previous.current, previous.versions.toMutableSet(), previous.rewrites.toMutableList())
       for (update in updates) {
         val captures = update.values.mapKeys { CompilerSnapshotKind(it.key) }
-        write(stage, update.location.line, captures, version, versioned, update.expectedSource,
+        write(stage, update.location.line, captures, version, if (update.assertionName in setOf("default", "versioned")) false else versioned, update.expectedSource,
           compiledSourceLine = true, assertionName = update.assertionName,
           argumentNames = captures.keys.associateWith { it.name })
       }

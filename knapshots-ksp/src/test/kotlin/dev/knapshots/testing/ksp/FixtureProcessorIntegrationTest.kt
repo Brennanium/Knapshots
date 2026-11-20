@@ -345,4 +345,13 @@ class FixtureProcessorIntegrationTest {
     )
   }
 
+  @Test fun `versioned snapshot DSL compares real generated source`() {
+    assertKsp(source, version, host, record = SnapshotRecording.NONE) {
+      generated {
+        default("incorrect default")
+        versioned(version.substringBeforeLast('.') + ".*", generated)
+      }
+    }
+  }
+
 }

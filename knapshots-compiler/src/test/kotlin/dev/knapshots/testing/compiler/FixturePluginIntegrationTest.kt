@@ -326,4 +326,13 @@ class FixturePluginIntegrationTest {
     assertTrue(result.diagnostics.any { it.severity == CompilerDiagnosticSeverity.WARNING && it.message.contains("Fixture warns about Second") && it.location == "Second.kt:2" }, result.diagnostics.toString())
   }
 
+  @Test fun `versioned snapshot DSL compares real fixture plugin output`() {
+    assertCompiler(source, version, host, record = SnapshotRecording.NONE) {
+      fir {
+        default("incorrect default")
+        versioned(version.substringBeforeLast('.') + ".*", "FIR classes\nfixture.AddMember\nfixture.Example")
+      }
+    }
+  }
+
 }

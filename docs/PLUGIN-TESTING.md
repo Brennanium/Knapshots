@@ -80,6 +80,58 @@ A host can use `temporaryCompilerHost` to receive a fresh temporary working dire
 
 This setup is experimental and requires the Knapshots Gradle plugin and compiler module. Knapshots' own tests use a small [internal compiler plugin](TEST-FIXTURES.md) to exercise diagnostics, FIR/IR phase observations, IR transformation, inline recording, bytecode, and both compiler hosts. KPaths also provides an opt-in cross-project integration test against a separate real compiler plugin.
 
+## Expectations for different Kotlin versions
+
+An output shared across versions can be written directly, such as `fir("...")`. When the output differs, put its expectations in a versioned block:
+
+```kotlin
+assertCompiler(source) {
+  fir {
+    default("shared FIR")
+    versioned("2.5.*", "FIR for Kotlin 2.5")
+  }
+  diagnostics {
+    default("shared diagnostics")
+    versioned("2.5.*", "diagnostics for Kotlin 2.5")
+  }
+}
+```
+
+`default(...)` is required within a versioned snapshot. Exact selectors, minor-family selectors such as `2.5.*`, and comparison ranges such as `>=2.4.20 <2.5.0` are supported. A minor-family selector includes preview versions in that family; `>=2.5.0` starts at the final release. Exact matches take precedence and overlapping non-exact selectors fail instead of choosing one. Invalid selectors are rejected even when they do not match.
+
+Leave a value out to record it on the compiler version that selects it:
+
+```kotlin
+assertCompiler(source) {
+  fir {
+    default()
+    versioned("2.5.*")
+    versioned("2.6.*")
+  }
+}
+```
+
+On Kotlin 2.5, only the `2.5.*` placeholder is selected. Missing placeholders for other versions are ignored; with recording disabled, a missing selected placeholder fails. Recording preserves other versions and fails the test so the change can be reviewed. `ir` and explicitly requested `bytecode` support the same blocks. The existing `SnapshotExpectation` API remains available.
+
+To change the outcome or several expectations together, use assertion-level version blocks:
+
+```kotlin
+assertCompiler(source) {
+  ir("IR shared by both versions")
+  default {
+    fails()
+    diagnostics { error("Unsupported declaration") }
+  }
+  versioned("2.5.*") {
+    succeeds()
+    fir("FIR for Kotlin 2.5")
+    diagnostics { default("") }
+  }
+}
+```
+
+Each top-level expectation is a default: `ir("...")` is equivalent to `default { ir("...") }`. A selected version block overrides only the kinds it declares; other kinds retain their defaults. In this example, the versioned diagnostics replace the default error expectation, and the default IR remains active. Defining the same kind twice at the default level, or declaring a selector twice at the assertion level, is an error. Selection happens before compilation so unselected captures are not requested. The snapshot selectors select expectations for the compiler already running the test; they do not choose or install a compiler.
+
 ## Configuring editor assertions today
 
 With the JUnit integration and a project-configured host, a test can call `assertEditor(source)` without passing a host. Input-only assertions snapshot the IDE diagnostics; when using focused diagnostic checks, unexpected errors fail by default. Reference resolution and expected diagnostics can be asserted in the block. The Gradle integration can use the test task's runtime classpath and infer selected version information. It still needs enough project configuration to apply the target Gradle plugin, locate any required IDE plugin, and launch the compatible adapter.

@@ -115,7 +115,7 @@ public fun assertCompiler(
     require(source.fileName.isNotBlank()) { "A compiler source file name must not be blank." }
   }
 
-  val expectations = CompilerExpectations(record, recordVersion).apply(block)
+  val expectations = CompilerExpectations(record, recordVersion, compilerVersion).apply(block).resolveVersions().prepareRecordingTargets()
   val autoTarget = if (record != SnapshotRecording.NONE && expectations.shouldAutomaticallyCaptureDiagnostics()) location ?: discoverInlineSnapshotLocation() else null
   val autoOriginal = autoTarget?.let { java.nio.file.Files.readString(it.file) }
   val autoKinds = if (autoTarget != null) compiler.defaultSnapshotKinds().intersect(setOf(CompilerSnapshotKind.FIR, CompilerSnapshotKind.IR)) else emptySet()
@@ -133,7 +133,11 @@ public fun assertCompiler(
 public class CompilerExpectations internal constructor(
   private val recording: SnapshotRecording = SnapshotRecording.NONE,
   private val recordVersion: Boolean = false,
+  private val compilerVersion: String = org.jetbrains.kotlin.config.KotlinCompilerVersion.VERSION,
 ) {
+  private val versionBranches = linkedMapOf<String, CompilerExpectations.() -> Unit>()
+  private var defaultBranch = false
+  private var isBranch = false
   private var expectedSuccess: Boolean? = null
   private val expectedDiagnostics = mutableListOf<ExpectedCompilerDiagnostic>()
   private var hasDiagnosticSnapshot = false
@@ -143,7 +147,76 @@ public class CompilerExpectations internal constructor(
   private var diagnosticCall: String = "snapshot"
   private var originalTestSource: String? = null
   private val expectedSnapshots = linkedMapOf<CompilerSnapshotKind, SnapshotExpectation>()
-  private val phaseUpdates = mutableMapOf<CompilerSnapshotKind, Triple<InlineSnapshotLocation, String, String>>()
+  private data class PhaseUpdate(val call: String, val target: () -> Pair<InlineSnapshotLocation, String>)
+  private val phaseUpdates = mutableMapOf<CompilerSnapshotKind, PhaseUpdate>()
+  private val versionedPhaseKinds = mutableSetOf<CompilerSnapshotKind>()
+  private var diagnosticTarget: (() -> Pair<InlineSnapshotLocation, String>)? = null
+
+  /** Groups default expectations; equivalent to declaring them at the assertion level. */
+  public fun default(block: CompilerExpectations.() -> Unit) {
+    check(!isBranch && !defaultBranch) { "Only one default block is allowed." }
+    defaultBranch = true
+    block()
+  }
+
+  /** Overrides individual expectations for matching compiler versions. */
+  public fun versioned(selector: String, block: CompilerExpectations.() -> Unit) {
+    check(!isBranch) { "Version blocks cannot be nested." }
+    check(selector !in versionBranches) { "Duplicate version selector: $selector." }
+    versionBranches[selector] = block
+  }
+
+  internal fun resolveVersions(): CompilerExpectations {
+    if (versionBranches.isEmpty()) return this
+    val selected = selectCompilerVersion(versionBranches.keys, compilerVersion) ?: return this
+    val branch = CompilerExpectations(recording, recordVersion, compilerVersion).also { it.isBranch = true }.apply(versionBranches.getValue(selected))
+    branch.expectedSuccess?.let { expectedSuccess = it }
+    branch.expectedSnapshots.forEach { (kind, snapshot) ->
+      expectedSnapshots[kind] = snapshot
+      phaseUpdates.remove(kind)
+      versionedPhaseKinds.remove(kind)
+      if (kind in branch.versionedPhaseKinds) versionedPhaseKinds.add(kind)
+      branch.phaseUpdates[kind]?.let { phaseUpdates[kind] = it }
+    }
+    if (branch.hasDiagnosticBlock) {
+      hasDiagnosticBlock = true
+      hasDiagnosticSnapshot = branch.hasDiagnosticSnapshot
+      diagnosticSnapshot = branch.diagnosticSnapshot
+      diagnosticLocation = branch.diagnosticLocation
+      diagnosticTarget = branch.diagnosticTarget
+      diagnosticCall = branch.diagnosticCall
+      originalTestSource = branch.originalTestSource
+      expectedDiagnostics.clear()
+      expectedDiagnostics.addAll(branch.expectedDiagnostics)
+    }
+    return this
+  }
+
+  internal fun prepareRecordingTargets(): CompilerExpectations {
+    phaseUpdates.replaceAll { _, pending ->
+      val captured = pending.target()
+      PhaseUpdate(pending.call) { captured }
+    }
+    diagnosticTarget = diagnosticTarget?.let { pending ->
+      val captured = pending()
+      val prepared: () -> Pair<InlineSnapshotLocation, String> = { captured }
+      prepared
+    }
+    return this
+  }
+
+  private fun versionedPhase(kind: CompilerSnapshotKind, block: VersionedSnapshotExpectations.() -> Unit) {
+    val entry = VersionedSnapshotExpectations().apply(block).selected(compilerVersion)
+    val expected = entry.expected?.let(::SnapshotExpectation) ?: dev.knapshots.testing.compiler.snapshot()
+    check(expectedSnapshots.put(kind, expected) == null) { "A ${kind.name} compiler snapshot was already requested." }
+    versionedPhaseKinds.add(kind)
+    if (dev.knapshots.testing.snapshot.mayRecordSnapshot(recording, expected.missing, false)) {
+      phaseUpdates[kind] = PhaseUpdate(entry.call) {
+        val target = entry.recordingLocation()
+        target to java.nio.file.Files.readString(target.file)
+      }
+    }
+  }
 
   /** Expects the compiler to complete successfully. */
   public fun succeeds() {
@@ -163,24 +236,42 @@ public class CompilerExpectations internal constructor(
 
   /** Checks individual diagnostics. Unmatched error diagnostics fail by default. */
   public fun diagnostics(block: CompilerDiagnosticExpectations.() -> Unit) {
+    check(!hasDiagnosticBlock) { "Diagnostics can only be specified once." }
     hasDiagnosticBlock = true
-    CompilerDiagnosticExpectations(expectedDiagnostics) { expected, location ->
+    CompilerDiagnosticExpectations(expectedDiagnostics, compilerVersion, { expected, location ->
       check(!hasDiagnosticSnapshot && expectedDiagnostics.isEmpty()) { "Diagnostic snapshots and individual expectations cannot be combined." }
       hasDiagnosticSnapshot = true
       diagnosticSnapshot = expected
       if (dev.knapshots.testing.snapshot.mayRecordSnapshot(recording, expected == null || expected.missing, recordVersion)) {
-        diagnosticLocation = location ?: discoverInlineSnapshotLocation()
-        originalTestSource = java.nio.file.Files.readString(checkNotNull(diagnosticLocation).file)
+        val frames = Throwable().stackTrace
+        diagnosticTarget = {
+          val target = location ?: discoverInlineSnapshotLocation(frames)
+          target to java.nio.file.Files.readString(target.file)
+        }
       }
-    }.apply(block)
+    }, { entry ->
+      check(!hasDiagnosticSnapshot && expectedDiagnostics.isEmpty()) { "Diagnostic snapshots and individual expectations cannot be combined." }
+      hasDiagnosticSnapshot = true
+      diagnosticSnapshot = entry.expected?.let(::SnapshotExpectation)
+      diagnosticCall = entry.call
+      if (dev.knapshots.testing.snapshot.mayRecordSnapshot(recording, entry.expected == null, false)) {
+        diagnosticTarget = {
+          val target = entry.recordingLocation()
+          target to java.nio.file.Files.readString(target.file)
+        }
+      }
+    }).apply(block).finish()
     check(!hasDiagnosticSnapshot || expectedDiagnostics.isEmpty()) { "Diagnostic snapshots and individual expectations cannot be combined." }
   }
 
   private fun phase(kind: CompilerSnapshotKind, expected: SnapshotExpectation, call: String, location: InlineSnapshotLocation?) {
     check(expectedSnapshots.put(kind, expected) == null) { "A ${kind.name} compiler snapshot was already requested." }
     if (dev.knapshots.testing.snapshot.mayRecordSnapshot(recording, expected.missing, recordVersion)) {
-      val target = location ?: discoverInlineSnapshotLocation()
-      phaseUpdates[kind] = Triple(target, call, java.nio.file.Files.readString(target.file))
+      val frames = Throwable().stackTrace
+      phaseUpdates[kind] = PhaseUpdate(call) {
+        val target = location ?: discoverInlineSnapshotLocation(frames)
+        target to java.nio.file.Files.readString(target.file)
+      }
     }
   }
 
@@ -191,14 +282,17 @@ public class CompilerExpectations internal constructor(
   /** Compare or record a FIR capture. */
   public fun fir(expected: SnapshotExpectation = dev.knapshots.testing.compiler.snapshot(), location: InlineSnapshotLocation? = null) = phase(CompilerSnapshotKind.FIR, expected, "fir", location)
   public fun fir(expected: String, location: InlineSnapshotLocation? = null) = phase(CompilerSnapshotKind.FIR, SnapshotExpectation(expected), "fir", location)
+  public fun fir(block: VersionedSnapshotExpectations.() -> Unit) = versionedPhase(CompilerSnapshotKind.FIR, block)
 
   /** Compare or record an IR capture. */
   public fun ir(expected: SnapshotExpectation = dev.knapshots.testing.compiler.snapshot(), location: InlineSnapshotLocation? = null) = phase(CompilerSnapshotKind.IR, expected, "ir", location)
   public fun ir(expected: String, location: InlineSnapshotLocation? = null) = phase(CompilerSnapshotKind.IR, SnapshotExpectation(expected), "ir", location)
+  public fun ir(block: VersionedSnapshotExpectations.() -> Unit) = versionedPhase(CompilerSnapshotKind.IR, block)
 
   /** Compare or record a JVM bytecode capture supplied by the compiler host. */
   public fun bytecode(expected: SnapshotExpectation = dev.knapshots.testing.compiler.snapshot(), location: InlineSnapshotLocation? = null) = phase(CompilerSnapshotKind.BYTECODE, expected, "bytecode", location)
   public fun bytecode(expected: String, location: InlineSnapshotLocation? = null) = phase(CompilerSnapshotKind.BYTECODE, SnapshotExpectation(expected), "bytecode", location)
+  public fun bytecode(block: VersionedSnapshotExpectations.() -> Unit) = versionedPhase(CompilerSnapshotKind.BYTECODE, block)
 
   internal fun snapshotKinds(): Set<CompilerSnapshotKind> = expectedSnapshots.keys
   internal fun shouldAutomaticallyCaptureDiagnostics(): Boolean = expectedSuccess == null && !hasDiagnosticBlock && expectedSnapshots.isEmpty()
@@ -219,9 +313,10 @@ public class CompilerExpectations internal constructor(
       val actual = result.captures[kind]
       if (actual == null) {
         failures += "The compiler did not provide the requested ${kind.name} snapshot."
-      } else if (shouldRecordSnapshot(expected, actual, compilerVersion, recording, recordVersion)) {
-        val (target, call, original) = checkNotNull(phaseUpdates[kind])
-        updates += InlineSnapshotUpdate(target, call, mapOf("expected" to actual), original)
+      } else if (shouldRecordSnapshot(expected, actual, compilerVersion, recording, if (kind in versionedPhaseKinds) false else recordVersion)) {
+        val pending = checkNotNull(phaseUpdates[kind])
+        val (target, original) = pending.target()
+        updates += InlineSnapshotUpdate(target, pending.call, mapOf("expected" to actual), original)
       } else if (expected.missing) {
         failures += "Missing ${kind.name} snapshot; enable recording to insert it."
       } else {
@@ -232,8 +327,11 @@ public class CompilerExpectations internal constructor(
     if (hasDiagnosticSnapshot) {
       val actual = renderCompilerDiagnostics(sources, result.diagnostics)
       val expectation = diagnosticSnapshot ?: dev.knapshots.testing.compiler.snapshot()
-      if (shouldRecordSnapshot(expectation, actual, compilerVersion, recording, recordVersion)) {
-        updates += InlineSnapshotUpdate(checkNotNull(diagnosticLocation), diagnosticCall, mapOf("expected" to actual), originalTestSource)
+      if (shouldRecordSnapshot(expectation, actual, compilerVersion, recording, if (diagnosticCall in setOf("default", "versioned")) false else recordVersion)) {
+        val (target, original) = checkNotNull(diagnosticTarget).invoke()
+        diagnosticLocation = target
+        originalTestSource = original
+        updates += InlineSnapshotUpdate(target, diagnosticCall, mapOf("expected" to actual), original)
       } else if (expectation.missing) {
         failures += "Missing diagnostic snapshot; enable recording to insert it."
       } else {
@@ -256,7 +354,7 @@ public class CompilerExpectations internal constructor(
       try {
         if (updates.size == 1) {
           val update = updates.single()
-          recordInlineSnapshots(update.location, update.assertionName, update.values, compilerVersion, if (autoDiagnostics) false else recordVersion, update.expectedSource)
+          recordInlineSnapshots(update.location, update.assertionName, update.values, compilerVersion, if (autoDiagnostics || update.assertionName in setOf("default", "versioned")) false else recordVersion, update.expectedSource)
         } else recordInlineSnapshotBatch(updates, compilerVersion, if (autoDiagnostics) false else recordVersion)
       } catch (error: Exception) {
         throw AssertionError("Could not record compiler snapshots: ${error.message}", error)
@@ -319,8 +417,19 @@ internal data class ExpectedCompilerDiagnostic(
 /** Builder for expected compiler diagnostics. */
 public class CompilerDiagnosticExpectations internal constructor(
   private val expected: MutableList<ExpectedCompilerDiagnostic>,
+  private val compilerVersion: String,
   private val recordSnapshot: (SnapshotExpectation?, InlineSnapshotLocation?) -> Unit,
+  private val recordVersioned: (VersionedSnapshotExpectations.Entry) -> Unit,
 ) {
+  private var versions: VersionedSnapshotExpectations? = null
+  public fun default(expected: String? = null, location: InlineSnapshotLocation? = null) {
+    (versions ?: VersionedSnapshotExpectations().also { versions = it }).default(expected, location)
+  }
+  public fun versioned(selector: String, expected: String? = null, location: InlineSnapshotLocation? = null) {
+    (versions ?: VersionedSnapshotExpectations().also { versions = it }).versioned(selector, expected, location)
+  }
+  internal fun finish() { versions?.let { recordVersioned(it.selected(compilerVersion)) } }
+
   /** Compare or record all diagnostics rendered against the source. */
   public fun snapshot(expected: String? = null, location: InlineSnapshotLocation? = null) = recordSnapshot(expected?.let(::SnapshotExpectation), location)
   public fun snapshot(expected: SnapshotExpectation, location: InlineSnapshotLocation? = null) = recordSnapshot(expected, location)
@@ -429,11 +538,30 @@ public fun discoverInlineSnapshotLocation(): InlineSnapshotLocation {
 
 /** Locate a recording call using explicit source roots, such as a subproject's test sources. */
 public fun discoverInlineSnapshotLocation(sourceRoots: List<java.nio.file.Path>): InlineSnapshotLocation {
-  val caller = Throwable().stackTrace.firstNotNullOfOrNull { frame ->
+  return discoverInlineSnapshotLocation(Throwable().stackTrace, sourceRoots)
+}
+
+internal fun discoverInlineSnapshotLocation(frames: Array<StackTraceElement>): InlineSnapshotLocation {
+  val sourceDirectory = java.nio.file.Path.of(System.getProperty("user.dir")).toAbsolutePath().resolve("src")
+  val roots = if (java.nio.file.Files.isDirectory(sourceDirectory)) java.nio.file.Files.list(sourceDirectory).use { directories ->
+    directories.filter { java.nio.file.Files.isDirectory(it) && (it.fileName.toString() == "test" || it.fileName.toString().endsWith("Test")) }
+      .flatMap { directory -> java.util.stream.Stream.of(directory.resolve("kotlin"), directory.resolve("java")) }.toList()
+  } else emptyList()
+  return discoverInlineSnapshotLocation(frames, roots)
+}
+
+private fun discoverInlineSnapshotLocation(frames: Array<StackTraceElement>, sourceRoots: List<java.nio.file.Path>): InlineSnapshotLocation {
+  val caller = frames.firstNotNullOfOrNull { frame ->
     if (frame.lineNumber <= 0 || frame.fileName == null || frame.className.startsWith("dev.knapshots.testing.compiler.CompilerAssertions")) return@firstNotNullOfOrNull null
     val packagePath = frame.className.substringBeforeLast('.', "").replace('.', '/')
     sourceRoots.map { it.resolve(packagePath).resolve(frame.fileName) }
       .firstOrNull(java.nio.file.Files::isRegularFile)?.let { InlineSnapshotLocation(it, frame.lineNumber) }
   }
   return requireNotNull(caller) { "Cannot locate the test source for inline recording; provide location explicitly." }
+}
+
+/** Captures a test call site for use after version selection but before compilation. */
+public fun deferredInlineSnapshotLocation(location: InlineSnapshotLocation? = null): () -> InlineSnapshotLocation {
+  val frames = Throwable().stackTrace
+  return { location ?: discoverInlineSnapshotLocation(frames) }
 }
