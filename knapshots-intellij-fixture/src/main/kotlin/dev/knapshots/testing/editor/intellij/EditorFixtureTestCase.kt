@@ -12,6 +12,7 @@ abstract class EditorFixtureTestCase : BasePlatformTestCase() {
     source: String,
     fileName: String = "Test.kt",
     additionalSources: Map<String, String> = emptyMap(),
+    record: dev.knapshots.testing.snapshot.SnapshotRecording = dev.knapshots.testing.editor.configuredEditorRecording(),
     block: EditorExpectations.() -> Unit,
   ) {
     val host = EditorSourceHost { request ->
@@ -23,6 +24,6 @@ abstract class EditorFixtureTestCase : BasePlatformTestCase() {
       IntellijEditorObservations(myFixture, ignoreMissingDependency)
     }
     dev.knapshots.testing.editor.assertEditor(source = source, host = host, fileName = fileName,
-      additionalSources = additionalSources.map { (name, text) -> dev.knapshots.testing.editor.EditorSource(name, text) }, block = block)
+      additionalSources = additionalSources.map { (name, text) -> dev.knapshots.testing.editor.EditorSource(name, text) }, record = record, block = block)
   }
 }

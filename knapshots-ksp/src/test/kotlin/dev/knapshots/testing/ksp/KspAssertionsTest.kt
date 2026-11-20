@@ -28,6 +28,63 @@ class KspAssertionsTest {
     """), additionalSources = listOf(KspSource("Other.kt", "class Other")))
   }
 
+  @Test fun `records generated source and diagnostics together atomically`(@TempDir directory: Path) {
+    val file = directory.resolve("Combined.kt")
+    val original = "fun test() {\n  assertKsp(\"class Input\") {\n    generated()\n    diagnostics()\n  }\n}\n"
+    Files.writeString(file, original)
+    val fake = KspHost { KspResult(true, mapOf("kotlin/Out.kt" to "class Out"), diagnostics = listOf(KspDiagnostic(KspDiagnosticSeverity.WARNING, "notice", "src/main/kotlin/Main.kt", 1, 1))) }
+    val failure = assertFailsWith<AssertionError> {
+      assertKsp("class Input", "2.4.21", fake, record = SnapshotRecording.MISSING) {
+        generated(location = InlineSnapshotLocation(file, 3))
+        diagnostics(InlineSnapshotLocation(file, 4))
+      }
+    }
+    assertContains(failure.message.orEmpty(), "Recorded inline snapshot")
+    val recorded = Files.readString(file)
+    assertContains(recorded, "generated(")
+    assertContains(recorded, "// FILE: kotlin/Out.kt")
+    assertContains(recorded, "diagnostics { snapshot(")
+    assertContains(recorded, "warning: notice")
+  }
+
+  @Test fun `a failed batch leaves the entire test unchanged`(@TempDir directory: Path) {
+    val file = directory.resolve("Combined.kt")
+    val original = "fun test() {\n  assertKsp(\"class Input\") {\n    generated()\n    diagnostics(unsupported = true)\n  }\n}\n"
+    Files.writeString(file, original)
+    val fake = KspHost { KspResult(true, mapOf("kotlin/Out.kt" to "class Out")) }
+    assertFailsWith<AssertionError> {
+      assertKsp("class Input", "2.4.21", fake, record = SnapshotRecording.MISSING) {
+        generated(location = InlineSnapshotLocation(file, 3))
+        diagnostics(InlineSnapshotLocation(file, 4))
+      }
+    }
+    assertEquals(original, Files.readString(file))
+  }
+
+  @Test fun `line-only diagnostics refer to the primary file`() {
+    val other = KspHost { KspResult(false, emptyMap(), diagnostics = listOf(KspDiagnostic(KspDiagnosticSeverity.ERROR, "bad", "src/main/kotlin/Other.kt", 3))) }
+    assertFailsWith<AssertionError> { assertKsp("class Input", "2.4.21", other) { fails(); diagnostics { error("bad", line = 3) } } }
+    assertKsp("class Input", "2.4.21", other) { fails(); diagnostics { error("bad", file = "Other.kt", line = 3) } }
+  }
+
+  @Test fun `diagnostics block selects and records versioned expectations`(@TempDir directory: Path) {
+    val fake = KspHost { KspResult(true, emptyMap(), diagnostics = listOf(KspDiagnostic(KspDiagnosticSeverity.WARNING, "notice", "src/main/kotlin/Main.kt", 1, 1))) }
+    val output = "class Input\n^\nwarning: notice"
+    assertKsp("class Input", "2.4.21", fake) {
+      succeeds(); diagnostics { snapshot(SnapshotExpectation("wrong", versions = mapOf("2.4.21" to output))) }
+    }
+    val file = directory.resolve("Version.kt")
+    Files.writeString(file, "fun test() {\n  diagnostics { snapshot(SnapshotExpectation(\"shared\")) }\n}\n")
+    assertFailsWith<AssertionError> {
+      assertKsp("class Input", "2.4.21", fake, record = SnapshotRecording.ALL, recordVersion = true) {
+        succeeds(); diagnostics { snapshot(SnapshotExpectation("shared"), location = InlineSnapshotLocation(file, 2)) }
+      }
+    }
+    val result = Files.readString(file)
+    assertContains(result, "versions = mapOf(\"2.4.21\" to")
+    assertContains(result, "warning: notice")
+  }
+
   @Test fun `checks failure and diagnostics`() {
     val failed = KspHost { KspResult(false, emptyMap(), "error: invalid property") }
     assertKsp("class Input", "2.4.21", failed, succeeds = false, diagnostics = listOf("invalid property"))

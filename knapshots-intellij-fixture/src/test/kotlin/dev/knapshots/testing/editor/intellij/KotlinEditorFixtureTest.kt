@@ -102,11 +102,11 @@ class KotlinEditorFixtureTest : EditorFixtureTestCase() {
     val file = java.nio.file.Files.createTempFile("knapshots-editor-record", ".kt")
     val previous = System.getProperty("knapshots.editor.record")
     try {
-      java.nio.file.Files.writeString(file, "fun test() {\n  sourceDiagnosticsSnapshot()\n}\n")
+      java.nio.file.Files.writeString(file, "fun test() {\n  diagnostics { snapshot() }\n}\n")
       System.setProperty("knapshots.editor.record", "missing")
       try {
         assertEditor(fileName = "Rejected.kt", source = "package fixture\nannotation class Reject\n@Reject class Disallowed") {
-          sourceDiagnosticsSnapshot(location = dev.knapshots.testing.editor.EditorSnapshotLocation(file, 2))
+          diagnostics { snapshot(location = dev.knapshots.testing.editor.EditorSnapshotLocation(file, 2)) }
         }
         fail("Recording must fail the test for review")
       } catch (error: AssertionError) {
@@ -115,7 +115,7 @@ class KotlinEditorFixtureTest : EditorFixtureTestCase() {
       val recorded = java.nio.file.Files.readString(file)
       assertTrue(recorded.contains("@Reject class Disallowed"))
       assertTrue(recorded.contains("error: [REJECTED] Fixture rejects Disallowed"))
-      assertTrue(recorded.contains("sourceDiagnosticsSnapshot(\"\"\""))
+      assertTrue(recorded.contains("snapshot(\"\"\""))
     } finally {
       if (previous == null) System.clearProperty("knapshots.editor.record") else System.setProperty("knapshots.editor.record", previous)
       java.nio.file.Files.deleteIfExists(file)

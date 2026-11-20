@@ -81,8 +81,9 @@ public class KnapshotsCompatibilityPlugin : Plugin<Project> {
       val editorDeclared = project.configurations.findByName("testRuntimeClasspath")?.allDependencies?.any {
         it.group == "dev.knapshots" && it.name.startsWith("knapshots-editor")
       } == true
-      val recordingEnabled = editorProject.recording.orNull?.lowercase(java.util.Locale.ROOT)?.let { it != "none" } == true
-      val recordingFiles = if (editorDeclared && recordingEnabled) project.files(recorder) else project.files()
+      // A test may opt in per assertion at runtime, so make the isolated worker available even
+      // when no project-wide recording mode has been selected.
+      val recordingFiles = if (editorDeclared) project.files(recorder) else project.files()
       project.tasks.withType(Test::class.java).configureEach { task ->
         task.jvmArgumentProviders.add(EditorProjectArguments(editorProject, task.classpath, recordingFiles))
       }

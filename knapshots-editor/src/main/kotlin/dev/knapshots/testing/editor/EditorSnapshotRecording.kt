@@ -1,6 +1,7 @@
 package dev.knapshots.testing.editor
 
 import dev.knapshots.testing.snapshot.IsolatedSnapshotRecorder
+import dev.knapshots.testing.snapshot.SnapshotRecording
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -9,10 +10,10 @@ public class EditorSnapshotLocation(public val file: Path, public val line: Int)
   internal val original: String = Files.readString(file)
 }
 
-internal fun editorRecordingMode(): String {
-  val mode = System.getProperty("knapshots.editor.record", "none").lowercase(java.util.Locale.ROOT)
-  require(mode in setOf("none", "missing", "failed", "all")) { "Invalid editor snapshot recording mode: $mode" }
-  return mode
+public fun configuredEditorRecording(): SnapshotRecording {
+  val mode = System.getProperty("knapshots.editor.record", "none").uppercase(java.util.Locale.ROOT)
+  return try { SnapshotRecording.valueOf(mode) }
+  catch (_: IllegalArgumentException) { error("Invalid editor snapshot recording mode: $mode") }
 }
 
 internal fun discoverEditorSnapshotLocation(): EditorSnapshotLocation {
@@ -33,7 +34,7 @@ internal fun discoverEditorSnapshotLocation(): EditorSnapshotLocation {
 
 private object EditorRecorder {
   private var recorder: IsolatedSnapshotRecorder? = null
-  @Synchronized fun record(location: EditorSnapshotLocation, output: String) {
+  @Synchronized fun record(location: EditorSnapshotLocation, output: String, assertionName: String) {
     val current = recorder ?: run {
       val classpath = requireNotNull(System.getProperty("knapshots.editor.recorderClasspath")) {
         "The isolated editor recording worker is not configured."
@@ -43,8 +44,8 @@ private object EditorRecorder {
         Runtime.getRuntime().addShutdownHook(Thread { worker.close() })
       }
     }
-    current.record(location.file, location.line, "sourceDiagnosticsSnapshot", mapOf("expected" to output), location.original)
+    current.record(location.file, location.line, assertionName, mapOf("expected" to output), location.original)
   }
 }
 
-internal fun recordEditorSnapshot(location: EditorSnapshotLocation, output: String) = EditorRecorder.record(location, output)
+internal fun recordEditorSnapshot(location: EditorSnapshotLocation, output: String, assertionName: String = "sourceDiagnosticsSnapshot") = EditorRecorder.record(location, output, assertionName)

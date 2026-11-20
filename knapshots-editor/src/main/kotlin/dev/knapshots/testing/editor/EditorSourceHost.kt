@@ -1,5 +1,7 @@
 package dev.knapshots.testing.editor
 
+import dev.knapshots.testing.snapshot.SnapshotRecording
+
 /** A named Kotlin source file supplied to an editor host. */
 public data class EditorSource(
   val fileName: String,
@@ -64,6 +66,7 @@ public fun assertEditor(
   additionalSources: List<EditorSource> = emptyList(),
   checkDiagnostics: Boolean = true,
   awaitReferences: Set<String> = emptySet(),
+  record: SnapshotRecording = configuredEditorRecording(),
   block: EditorExpectations.() -> Unit,
 ) {
   require(fileName.isNotBlank()) { "The source file name must not be blank." }
@@ -71,7 +74,7 @@ public fun assertEditor(
     require(sourceFile.fileName.isNotBlank()) { "An additional source file name must not be blank." }
     sourceFile.copy(text = sourceFile.text.trimIndent())
   }
-  val expectations = EditorExpectations(checkDiagnostics).apply(block)
+  val expectations = EditorExpectations(checkDiagnostics, record).apply(block)
   val observations = host.open(
     EditorRequest(
       sources = sources,
@@ -112,10 +115,11 @@ public fun assertEditor(
   additionalSources: List<EditorSource> = emptyList(),
   checkDiagnostics: Boolean = true,
   awaitReferences: Set<String> = emptySet(),
+  record: SnapshotRecording = configuredEditorRecording(),
   block: EditorExpectations.() -> Unit,
 ) {
   val host = checkNotNull(editorHostContext.get()) {
     "No editor host is configured; use withEditorHost or pass host to assertEditor."
   }
-  assertEditor(source, host, fileName, additionalSources, checkDiagnostics, awaitReferences, block)
+  assertEditor(source, host, fileName, additionalSources, checkDiagnostics, awaitReferences, record, block)
 }

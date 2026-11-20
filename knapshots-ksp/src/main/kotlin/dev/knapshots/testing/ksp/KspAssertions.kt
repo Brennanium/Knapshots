@@ -5,6 +5,8 @@ import dev.knapshots.testing.compiler.CompilerDiagnosticSeverity
 import dev.knapshots.testing.compiler.CompilerSource
 import dev.knapshots.testing.compiler.renderCompilerDiagnostics
 import dev.knapshots.testing.compiler.InlineSnapshotLocation
+import dev.knapshots.testing.compiler.InlineSnapshotUpdate
+import dev.knapshots.testing.compiler.recordInlineSnapshotBatch
 import dev.knapshots.testing.compiler.SnapshotExpectation
 import dev.knapshots.testing.compiler.SnapshotRecording
 import dev.knapshots.testing.compiler.discoverInlineSnapshotLocation
@@ -23,6 +25,74 @@ public data class KspDiagnosticExpectation(val severity: KspDiagnosticSeverity, 
 public data class KspRequest(val sources: List<KspSource>, val compilerVersion: String, val dependencies: List<KspDependency> = emptyList(), val mainClass: String? = null, val processorProjects: List<KspProcessorProject> = emptyList())
 public data class KspResult(val succeeded: Boolean, val generatedFiles: Map<String, String>, val output: String = "", val diagnostics: List<KspDiagnostic> = emptyList(), val executionSucceeded: Boolean? = null)
 public fun interface KspHost { public fun process(request: KspRequest): KspResult }
+
+/** Expectations supplied in the trailing assertion block. */
+public class KspExpectations internal constructor(private val recording: SnapshotRecording) {
+  internal var outcome: Boolean? = null
+  internal var hasGenerated = false
+  internal var expectedGenerated: SnapshotExpectation? = null
+  internal var generatedLocation: InlineSnapshotLocation? = null
+  internal var generatedOriginal: String? = null
+  internal val diagnosticItems = mutableListOf<KspDiagnosticExpectation>()
+  internal var hasDiagnosticBlock = false
+  internal var hasDiagnosticSnapshot = false
+  internal var expectedSnapshot: SnapshotExpectation? = null
+  internal var snapshotLocation: InlineSnapshotLocation? = null
+  internal var snapshotCall: String = "snapshot"
+  internal var originalSource: String? = null
+
+  public fun succeeds() { check(outcome == null) { "Compilation outcome can only be specified once." }; outcome = true }
+  public fun fails() { check(outcome == null) { "Compilation outcome can only be specified once." }; outcome = false }
+  /** Compare or record the processor's generated source files. */
+  public fun generated(expected: String? = null, location: InlineSnapshotLocation? = null) = configureGenerated(expected?.let(::SnapshotExpectation), location)
+  public fun generated(expected: SnapshotExpectation, location: InlineSnapshotLocation? = null) = configureGenerated(expected, location)
+  private fun configureGenerated(expected: SnapshotExpectation?, location: InlineSnapshotLocation?) {
+    check(!hasGenerated) { "Generated output can only be specified once." }
+    hasGenerated = true
+    expectedGenerated = expected
+    if (recording != SnapshotRecording.NONE) {
+      generatedLocation = location ?: discoverInlineSnapshotLocation()
+      generatedOriginal = Files.readString(checkNotNull(generatedLocation).file)
+    }
+  }
+  /** Record a diagnostic snapshot, expanding to a diagnostics block. */
+  public fun diagnostics(location: InlineSnapshotLocation? = null) {
+    diagnostics { snapshot(location = location) }
+    snapshotCall = "diagnostics"
+  }
+  public fun diagnostics(block: KspDiagnosticExpectations.() -> Unit) {
+    check(!hasDiagnosticBlock) { "Diagnostics can only be specified once." }
+    hasDiagnosticBlock = true
+    KspDiagnosticExpectations(diagnosticItems) { expected, location ->
+      check(!hasDiagnosticSnapshot && diagnosticItems.isEmpty()) { "Diagnostic snapshots and individual expectations cannot be combined." }
+      hasDiagnosticSnapshot = true
+      expectedSnapshot = expected
+      if (recording != SnapshotRecording.NONE) {
+        snapshotLocation = location ?: discoverInlineSnapshotLocation()
+        originalSource = Files.readString(checkNotNull(snapshotLocation).file)
+      }
+    }.apply(block)
+    check(!hasDiagnosticSnapshot || diagnosticItems.isEmpty()) { "Diagnostic snapshots and individual expectations cannot be combined." }
+  }
+}
+
+public class KspDiagnosticExpectations internal constructor(
+  private val expected: MutableList<KspDiagnosticExpectation>,
+  private val recordSnapshot: (SnapshotExpectation?, InlineSnapshotLocation?) -> Unit,
+) {
+  public fun snapshot(expected: String? = null, location: InlineSnapshotLocation? = null) = recordSnapshot(expected?.let(::SnapshotExpectation), location)
+  public fun snapshot(expected: SnapshotExpectation, location: InlineSnapshotLocation? = null) = recordSnapshot(expected, location)
+  public fun error(messageContains: String, file: String? = null, line: Int? = null, column: Int? = null) =
+    expect(KspDiagnosticSeverity.ERROR, messageContains, file, line, column)
+  public fun warning(messageContains: String, file: String? = null, line: Int? = null, column: Int? = null) =
+    expect(KspDiagnosticSeverity.WARNING, messageContains, file, line, column)
+  private fun expect(severity: KspDiagnosticSeverity, message: String, file: String?, line: Int?, column: Int?) {
+    require(message.isNotBlank()) { "Expected diagnostic text must not be blank." }
+    require(line == null || line > 0) { "Diagnostic line must be positive." }
+    require(column == null || column > 0) { "Diagnostic column must be positive." }
+    expected += KspDiagnosticExpectation(severity, message, file, line, column)
+  }
+}
 
 /** Asserts processor output and compilation outcome. File names are part of the snapshot. */
 public fun assertKsp(
@@ -43,22 +113,30 @@ public fun assertKsp(
   recordVersion: Boolean = System.getProperty("knapshots.ksp.recordVersion", "false").toBooleanStrict(),
   location: InlineSnapshotLocation? = null,
   diagnosticSnapshot: SnapshotExpectation? = null,
+  block: (KspExpectations.() -> Unit)? = null,
 ) {
   require(compilerVersion.isNotBlank()) { "A compiler version is required." }
+  val expectations = KspExpectations(record).also { if (block != null) it.block() }
+  check(!expectations.hasGenerated || generated == null) { "Generated output cannot be specified both in the block and in a parameter." }
+  check(!expectations.hasDiagnosticBlock || (expectedDiagnostics == null && diagnosticSnapshot == null && diagnostics.isEmpty())) {
+    "The diagnostics block cannot be combined with diagnostic parameters."
+  }
+  val wantedSuccess = expectations.outcome ?: succeeds
+  val wantedDiagnostics = if (expectations.hasDiagnosticBlock && !expectations.hasDiagnosticSnapshot) expectations.diagnosticItems else expectedDiagnostics
   val sources = listOf(KspSource(fileName, source)) + additionalSources
   require(sources.map { it.fileName }.distinct().size == sources.size) { "Source file names must be unique." }
   val target = if ((generated != null || diagnosticSnapshot != null) && record != SnapshotRecording.NONE) location ?: discoverInlineSnapshotLocation() else null
   val original = target?.let { Files.readString(it.file) }
   val result = host.process(KspRequest(sources.map { it.copy(text = it.text.trimIndent()) }, compilerVersion,
     dependencies.map { dependency -> dependency.copy(sources = dependency.sources.map { it.copy(text = it.text.trimIndent()) }) }, mainClass, processorProjects.map { processor -> processor.copy(sources = processor.sources.map { it.copy(text = it.text.trimIndent()) }) }))
-  if (result.succeeded != succeeds) throw AssertionError("Expected KSP compilation to ${if (succeeds) "succeed" else "fail"}, but it ${if (result.succeeded) "succeeded" else "failed"}.\n${result.output}")
+  if (result.succeeded != wantedSuccess) throw AssertionError("Expected KSP compilation to ${if (wantedSuccess) "succeed" else "fail"}, but it ${if (result.succeeded) "succeeded" else "failed"}.\n${result.output}")
   diagnostics.forEach { expected ->
     if (!result.output.contains(expected)) throw AssertionError("Missing diagnostic containing '$expected'.\n${result.output}")
   }
   if (mainClass != null && result.succeeded && result.executionSucceeded != executionSucceeds) {
     throw AssertionError("Expected execution to ${if (executionSucceeds) "succeed" else "fail"}, but it ${when (result.executionSucceeded) { true -> "succeeded"; false -> "failed"; null -> "did not run" }}.\n${result.output}")
   }
-  expectedDiagnostics?.let { expected ->
+  wantedDiagnostics?.let { expected ->
     val owner = IntArray(result.diagnostics.size) { -1 }
     fun assign(expectedIndex: Int, visited: BooleanArray): Boolean {
       val item = expected[expectedIndex]
@@ -66,7 +144,12 @@ public fun assertKsp(
       for (index in result.diagnostics.indices) {
         val actual = result.diagnostics[index]
         if (visited[index] || actual.severity != item.severity || !actual.message.contains(item.messageContains) ||
-          (item.file != null && actual.file != item.file) || (item.line != null && actual.line != item.line) ||
+          (item.file != null && if (expectations.hasDiagnosticBlock)
+            actual.file?.replace('\\', '/')?.removePrefix("src/main/kotlin/") != item.file.replace('\\', '/').removePrefix("src/main/kotlin/")
+            else actual.file != item.file) ||
+          (expectations.hasDiagnosticBlock && item.file == null && (item.line != null || item.column != null) &&
+            actual.file?.replace('\\', '/')?.removePrefix("src/main/kotlin/") != fileName.replace('\\', '/')) ||
+          (item.line != null && actual.line != item.line) ||
           (item.column != null && actual.column != item.column)) continue
         visited[index] = true
         if (owner[index] == -1 || assign(owner[index], visited)) { owner[index] = expectedIndex; return true }
@@ -82,7 +165,7 @@ public fun assertKsp(
   val actual = result.generatedFiles.toSortedMap().entries.joinToString("\n\n") { (name, text) ->
     "// FILE: $name\n${text.trimEnd('\n', '\r')}"
   }
-  val renderedDiagnostics = diagnosticSnapshot?.let {
+  val renderedDiagnostics = if (diagnosticSnapshot != null || expectations.hasDiagnosticSnapshot) {
     renderCompilerDiagnostics(sources.map { source -> CompilerSource(source.fileName, source.text.trimIndent()) },
       result.diagnostics.map { item ->
         CompilerDiagnostic(when (item.severity) {
@@ -94,18 +177,45 @@ public fun assertKsp(
           item.line?.let { line -> "$normalized:$line" } ?: normalized
         }, item.column)
       })
-  }
+  } else null
   val updates = mutableMapOf<String, String>()
   if (generated != null && shouldRecordSnapshot(generated, actual, compilerVersion, record, recordVersion)) updates["generated"] = actual
   if (diagnosticSnapshot != null && shouldRecordSnapshot(diagnosticSnapshot, checkNotNull(renderedDiagnostics), compilerVersion, record, recordVersion)) updates["diagnosticSnapshot"] = renderedDiagnostics
-  if (updates.isNotEmpty()) {
-    val destination = checkNotNull(target)
+  val generatedExpectation = if (expectations.hasGenerated) expectations.expectedGenerated ?: dev.knapshots.testing.compiler.snapshot() else null
+  val generatedDifference = if (generatedExpectation != null && !generatedExpectation.missing)
+    compareSnapshot(actual, generatedExpectation.forVersion(compilerVersion).trimIndent().trimEnd('\n', '\r'), textSnapshotting) else null
+  val recordGenerated = generatedExpectation != null && shouldRecordSnapshot(generatedExpectation, actual, compilerVersion, record, recordVersion)
+  val dslExpectation = if (expectations.hasDiagnosticSnapshot) expectations.expectedSnapshot ?: dev.knapshots.testing.compiler.snapshot() else null
+  val dslDifference = if (dslExpectation != null && !dslExpectation.missing)
+    compareSnapshot(checkNotNull(renderedDiagnostics), dslExpectation.forVersion(compilerVersion).trimIndent().trimEnd('\n', '\r'), textSnapshotting) else null
+  val recordDsl = dslExpectation != null && shouldRecordSnapshot(dslExpectation, checkNotNull(renderedDiagnostics), compilerVersion, record, recordVersion)
+  val inlineUpdates = mutableListOf<InlineSnapshotUpdate>()
+  if (updates.isNotEmpty()) inlineUpdates += InlineSnapshotUpdate(checkNotNull(target), "assertKsp", updates, original)
+  if (recordGenerated) inlineUpdates += InlineSnapshotUpdate(checkNotNull(expectations.generatedLocation), "generated", mapOf("expected" to actual), expectations.generatedOriginal)
+  if (recordDsl) inlineUpdates += InlineSnapshotUpdate(checkNotNull(expectations.snapshotLocation), expectations.snapshotCall, mapOf("expected" to checkNotNull(renderedDiagnostics)), expectations.originalSource)
+  if (inlineUpdates.isNotEmpty()) {
     try {
-      recordInlineSnapshots(destination, "assertKsp", updates, compilerVersion, recordVersion, original)
+      if (inlineUpdates.size == 1) {
+        val update = inlineUpdates.single()
+        recordInlineSnapshots(update.location, update.assertionName, update.values, compilerVersion, recordVersion, update.expectedSource)
+      } else recordInlineSnapshotBatch(inlineUpdates, compilerVersion, recordVersion)
     } catch (error: Exception) {
-      throw AssertionError("Could not record inline snapshot at ${destination.file}:${destination.line}: ${error.message}", error)
+      throw AssertionError("Could not record inline snapshots: ${error.message}", error)
     }
-    throw AssertionError("Recorded inline snapshot at ${destination.file}:${destination.line}; review and rerun the test.")
+    val description = when {
+      recordGenerated && inlineUpdates.size == 1 -> "generated source"
+      recordDsl && inlineUpdates.size == 1 -> "diagnostics"
+      else -> "inline snapshot"
+    }
+    throw AssertionError("Recorded $description; review and rerun the test.")
+  }
+  if (generatedExpectation != null) {
+    check(!generatedExpectation.missing) { "Missing generated source snapshot; enable recording to insert it." }
+    if (generatedDifference != null) throw AssertionError("Generated KSP source differs:\nExpected:\n${generatedDifference.expected}\nActual:\n${generatedDifference.actual}")
+  }
+  if (expectations.hasDiagnosticSnapshot) {
+    check(!checkNotNull(dslExpectation).missing) { "Missing diagnostic snapshot; enable recording to insert it." }
+    if (dslDifference != null) throw AssertionError("KSP diagnostic snapshot differs:\nExpected:\n${dslDifference.expected}\nActual:\n${dslDifference.actual}")
   }
   fun compare(name: String, expectation: SnapshotExpectation, output: String) {
     check(!expectation.missing) { "Missing $name snapshot; enable recording to insert it." }

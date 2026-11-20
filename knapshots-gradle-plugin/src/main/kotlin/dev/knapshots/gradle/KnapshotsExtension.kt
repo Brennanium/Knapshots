@@ -101,8 +101,12 @@ internal class EditorProjectArguments(
     "record" to config.recording,
     "recordVersion" to config.recordCompilerVersion.map { it.toString() },
   )
+  @get:Internal val kspValues = mapOf(
+    "record" to config.recording,
+    "recordVersion" to config.recordCompilerVersion.map { it.toString() },
+  )
   @get:Input val configurationArguments: List<String> get() =
-    arguments("editor", editorValues) + arguments("compiler", compilerValues)
+    arguments("editor", editorValues) + arguments("compiler", compilerValues) + arguments("ksp", kspValues)
 
   private fun arguments(prefix: String, values: Map<String, org.gradle.api.provider.Provider<String>>): List<String> =
     values.mapNotNull { (key, provider) -> provider.orNull?.let { "-Dknapshots.$prefix.$key=$it" } }

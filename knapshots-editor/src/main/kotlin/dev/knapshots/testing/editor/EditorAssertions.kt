@@ -1,5 +1,6 @@
 package dev.knapshots.testing.editor
 
+import dev.knapshots.testing.snapshot.SnapshotRecording
 import dev.knapshots.testing.snapshot.DiagnosticSource
 import dev.knapshots.testing.snapshot.SourceDiagnostic
 import dev.knapshots.testing.snapshot.renderSourceDiagnostics
@@ -36,9 +37,10 @@ public interface EditorObservations {
 public fun assertEditor(
   observations: EditorObservations,
   checkDiagnostics: Boolean = true,
+  record: SnapshotRecording = configuredEditorRecording(),
   block: EditorExpectations.() -> Unit,
 ) {
-  EditorExpectations(checkDiagnostics).apply(block).verify(observations)
+  EditorExpectations(checkDiagnostics, record).apply(block).verify(observations)
 }
 
 private val diagnosticSnapshotting = textSnapshotting.pullback<List<EditorDiagnostic>> { diagnostics ->
@@ -49,6 +51,7 @@ private val diagnosticSnapshotting = textSnapshotting.pullback<List<EditorDiagno
 
 public class EditorExpectations internal constructor(
   private val checkDiagnostics: Boolean,
+  private val recording: SnapshotRecording,
 ) {
   private val expectedDiagnostics = mutableListOf<ExpectedDiagnostic>()
   private val references = mutableListOf<ReferenceExpectation>()
@@ -56,13 +59,27 @@ public class EditorExpectations internal constructor(
   private var expectedSourceDiagnosticSnapshot: String? = null
   private var hasSourceDiagnosticSnapshot = false
   private var sourceSnapshotLocation: EditorSnapshotLocation? = null
+  private var sourceSnapshotCall: String = "sourceDiagnosticsSnapshot"
   private var hasDiagnosticBlock = false
+
+  /** Record a diagnostic snapshot, expanding to a diagnostics block. */
+  public fun diagnostics(location: EditorSnapshotLocation? = null) {
+    diagnostics { snapshot(location = location) }
+    sourceSnapshotCall = "diagnostics"
+  }
 
   public fun diagnostics(block: DiagnosticExpectations.() -> Unit) {
     check(checkDiagnostics) { "Diagnostic checking is disabled for this editor assertion." }
     check(expectedDiagnosticSnapshot == null && !hasSourceDiagnosticSnapshot) { "Diagnostic snapshots and individual diagnostic expectations cannot be combined." }
     hasDiagnosticBlock = true
-    DiagnosticExpectations(expectedDiagnostics).apply(block)
+    DiagnosticExpectations(expectedDiagnostics) { expected, location ->
+      check(expectedDiagnostics.isEmpty() && !hasSourceDiagnosticSnapshot) { "Diagnostic snapshots and individual diagnostic expectations cannot be combined." }
+      hasSourceDiagnosticSnapshot = true
+      expectedSourceDiagnosticSnapshot = expected?.trimIndent()?.trimEnd('\n', '\r')
+      sourceSnapshotCall = "snapshot"
+      if (recording != SnapshotRecording.NONE) sourceSnapshotLocation = location ?: discoverEditorSnapshotLocation()
+    }.apply(block)
+    check(!hasSourceDiagnosticSnapshot || expectedDiagnostics.isEmpty()) { "Diagnostic snapshots and individual diagnostic expectations cannot be combined." }
   }
 
   /** Compare all captured diagnostics as text, including warnings. Recording is not yet supported. */
@@ -82,7 +99,7 @@ public class EditorExpectations internal constructor(
     }
     hasSourceDiagnosticSnapshot = true
     expectedSourceDiagnosticSnapshot = expected?.trimIndent()?.trimEnd('\n', '\r')
-    if (editorRecordingMode() != "none") sourceSnapshotLocation = location ?: discoverEditorSnapshotLocation()
+    if (recording != SnapshotRecording.NONE) sourceSnapshotLocation = location ?: discoverEditorSnapshotLocation()
   }
 
   public fun reference(expression: String): ReferenceExpectation {
@@ -125,16 +142,12 @@ public class EditorExpectations internal constructor(
           match?.groupValues?.get(3)?.toIntOrNull(), diagnostic.location)
       })
       val difference = sourceSnapshot?.let { compareSnapshot(rendered, it, textSnapshotting) }
-      val shouldRecord = when (editorRecordingMode()) {
-        "none" -> false
-        "missing" -> sourceSnapshot == null
-        "failed" -> sourceSnapshot == null || difference != null
-        "all" -> true
-        else -> error("Invalid editor snapshot recording mode.")
-      }
+      val shouldRecord = dev.knapshots.testing.snapshot.shouldRecordSnapshot(
+        recording, missing = sourceSnapshot == null, differs = sourceSnapshot == null || difference != null,
+      )
       if (shouldRecord) {
         val location = checkNotNull(sourceSnapshotLocation)
-        recordEditorSnapshot(location, rendered)
+        recordEditorSnapshot(location, rendered, sourceSnapshotCall)
         throw AssertionError("Recorded editor diagnostics at ${location.file}:${location.line}; review and rerun the test.")
       }
       checkNotNull(sourceSnapshot) { "Missing source diagnostic snapshot; enable recording to insert it." }
@@ -149,9 +162,18 @@ public class EditorExpectations internal constructor(
         val expected = expectedDiagnostics[expectedIndex]
         for (index in actual.indices) {
           val diagnostic = actual[index]
+          val normalized = diagnostic.location?.replace('\\', '/')
+          val match = normalized?.let { Regex("^(.*):(\\d+):(\\d+)$").matchEntire(it) }
+          val lineOnly = if (match == null) normalized?.let { Regex("^(.*):(\\d+)$").matchEntire(it) } else null
+          val wantedFile = expected.file ?: if (expected.line != null || expected.column != null) {
+            checkNotNull(sources) { "Line-only editor diagnostics require a source-hosted assertEditor or an explicit file." }.first().fileName
+          } else null
           if (visited[index] || diagnostic.severity != expected.severity ||
             !diagnostic.message.contains(expected.messageContains) ||
-            (expected.location != null && expected.location != diagnostic.location)) continue
+            (expected.location != null && expected.location != diagnostic.location) ||
+            (wantedFile != null && (match?.groupValues?.get(1) ?: lineOnly?.groupValues?.get(1)) != wantedFile.replace('\\', '/')) ||
+            (expected.line != null && (match?.groupValues?.get(2) ?: lineOnly?.groupValues?.get(2))?.toIntOrNull() != expected.line) ||
+            (expected.column != null && match?.groupValues?.get(3)?.toIntOrNull() != expected.column)) continue
           visited[index] = true
           if (owner[index] == -1 || assign(owner[index], visited)) {
             owner[index] = expectedIndex
@@ -171,15 +193,23 @@ public class EditorExpectations internal constructor(
   }
 }
 
-internal data class ExpectedDiagnostic(val severity: DiagnosticSeverity, val messageContains: String, val location: String?)
+internal data class ExpectedDiagnostic(val severity: DiagnosticSeverity, val messageContains: String, val location: String?, val file: String?, val line: Int?, val column: Int?)
 
-public class DiagnosticExpectations internal constructor(private val expected: MutableList<ExpectedDiagnostic>) {
-  public fun error(messageContains: String, location: String? = null) = expect(DiagnosticSeverity.ERROR, messageContains, location)
-  public fun warning(messageContains: String, location: String? = null) = expect(DiagnosticSeverity.WARNING, messageContains, location)
+public class DiagnosticExpectations internal constructor(
+  private val expected: MutableList<ExpectedDiagnostic>,
+  private val recordSnapshot: (String?, EditorSnapshotLocation?) -> Unit,
+) {
+  /** Compare or record all diagnostics rendered against the source. */
+  public fun snapshot(expected: String? = null, location: EditorSnapshotLocation? = null) = recordSnapshot(expected, location)
+  public fun error(messageContains: String, location: String? = null, file: String? = null, line: Int? = null, column: Int? = null) = expect(DiagnosticSeverity.ERROR, messageContains, location, file, line, column)
+  public fun warning(messageContains: String, location: String? = null, file: String? = null, line: Int? = null, column: Int? = null) = expect(DiagnosticSeverity.WARNING, messageContains, location, file, line, column)
 
-  private fun expect(severity: DiagnosticSeverity, message: String, location: String?) {
+  private fun expect(severity: DiagnosticSeverity, message: String, location: String?, file: String?, line: Int?, column: Int?) {
     require(message.isNotBlank()) { "Expected diagnostic message must not be blank." }
-    expected += ExpectedDiagnostic(severity, message, location)
+    require(file == null || file.isNotBlank()) { "Diagnostic file must not be blank." }
+    require(line == null || line > 0) { "Diagnostic line must be positive." }
+    require(column == null || column > 0) { "Diagnostic column must be positive." }
+    expected += ExpectedDiagnostic(severity, message, location, file, line, column)
   }
 }
 

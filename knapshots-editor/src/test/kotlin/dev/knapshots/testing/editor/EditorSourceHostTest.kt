@@ -1,5 +1,6 @@
 package dev.knapshots.testing.editor
 
+import dev.knapshots.testing.snapshot.SnapshotRecording
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import java.nio.file.Path
@@ -100,6 +101,107 @@ class EditorSourceHostTest {
       assertEditor("val x = missing", host) { sourceDiagnosticsSnapshot("val x = missing\n        ^\nerror: Unresolved reference") }
     } finally {
       if (previous == null) System.clearProperty("knapshots.editor.record") else System.setProperty("knapshots.editor.record", previous)
+    }
+  }
+
+  @Test fun `diagnostic block records a source snapshot`(@TempDir directory: Path) {
+    val file = directory.resolve("SnapshotTest.kt")
+    Files.writeString(file, "fun test() {\n  diagnostics { snapshot() }\n}\n")
+    val host = EditorSourceHost {
+      object : EditorObservations {
+        override fun diagnostics() = listOf(EditorDiagnostic(DiagnosticSeverity.ERROR, "Unresolved reference", "Test.kt:1:9"))
+        override fun reference(expression: String) = ReferenceObservation.Unresolved
+      }
+    }
+    val previous = System.getProperty("knapshots.editor.record")
+    try {
+      System.setProperty("knapshots.editor.record", "missing")
+      val error = assertFailsWith<AssertionError> {
+        assertEditor("val x = missing", host) { diagnostics { snapshot(location = EditorSnapshotLocation(file, 2)) } }
+      }
+      assertContains(error.message.orEmpty(), "Recorded editor diagnostics")
+      assertContains(Files.readString(file), "error: Unresolved reference")
+      System.setProperty("knapshots.editor.record", "none")
+      assertEditor("val x = missing", host) { diagnostics { snapshot("val x = missing\n        ^\nerror: Unresolved reference") } }
+      assertFailsWith<IllegalStateException> {
+        assertEditor("val x = missing", host) { diagnostics { snapshot(""); error("Unresolved") } }
+      }
+    } finally {
+      if (previous == null) System.clearProperty("knapshots.editor.record") else System.setProperty("knapshots.editor.record", previous)
+    }
+  }
+
+  @Test fun `diagnostics shorthand records an editor snapshot`(@TempDir directory: Path) {
+    val file = directory.resolve("Short.kt")
+    Files.writeString(file, "fun test() {\n  diagnostics()\n}\n")
+    val host = EditorSourceHost { object : EditorObservations {
+      override fun diagnostics() = listOf(EditorDiagnostic(DiagnosticSeverity.ERROR, "Unresolved reference", "Test.kt:1:9"))
+      override fun reference(expression: String) = ReferenceObservation.Unresolved
+    } }
+    val previous = System.getProperty("knapshots.editor.record")
+    try {
+      System.setProperty("knapshots.editor.record", "missing")
+      assertFailsWith<AssertionError> { assertEditor("val x = missing", host) { diagnostics(EditorSnapshotLocation(file, 2)) } }
+      assertContains(Files.readString(file), "diagnostics { snapshot(")
+      assertContains(Files.readString(file), "error: Unresolved reference")
+    } finally {
+      if (previous == null) System.clearProperty("knapshots.editor.record") else System.setProperty("knapshots.editor.record", previous)
+    }
+  }
+
+  @Test fun `failed recording replaces an existing diagnostic snapshot`(@TempDir directory: Path) {
+    val file = directory.resolve("Existing.kt")
+    Files.writeString(file, "fun test() {\n  diagnostics { snapshot(\"old\") }\n}\n")
+    val host = EditorSourceHost { object : EditorObservations {
+      override fun diagnostics() = listOf(EditorDiagnostic(DiagnosticSeverity.ERROR, "Unresolved", "Test.kt:1:9"))
+      override fun reference(expression: String) = ReferenceObservation.Unresolved
+    } }
+    val previous = System.getProperty("knapshots.editor.record")
+    try {
+      System.setProperty("knapshots.editor.record", "failed")
+      assertFailsWith<AssertionError> {
+        assertEditor("val x = missing", host) { diagnostics { snapshot("old", EditorSnapshotLocation(file, 2)) } }
+      }
+      assertContains(Files.readString(file), "error: Unresolved")
+      check(!Files.readString(file).contains("snapshot(\"old\")"))
+    } finally {
+      if (previous == null) System.clearProperty("knapshots.editor.record") else System.setProperty("knapshots.editor.record", previous)
+    }
+  }
+
+  @Test fun `per assertion recording overrides the project default`(@TempDir directory: Path) {
+    val file = directory.resolve("PerAssertion.kt")
+    Files.writeString(file, "fun test() {\n  diagnostics()\n}\n")
+    val host = EditorSourceHost { object : EditorObservations {
+      override fun diagnostics() = listOf(EditorDiagnostic(DiagnosticSeverity.ERROR, "Unresolved", "Test.kt:1:9"))
+      override fun reference(expression: String) = ReferenceObservation.Unresolved
+    } }
+    val previous = System.getProperty("knapshots.editor.record")
+    try {
+      System.setProperty("knapshots.editor.record", "none")
+      assertFailsWith<AssertionError> {
+        assertEditor("val x = missing", host, record = SnapshotRecording.MISSING) { diagnostics(EditorSnapshotLocation(file, 2)) }
+      }
+      assertContains(Files.readString(file), "error: Unresolved")
+    } finally {
+      if (previous == null) System.clearProperty("knapshots.editor.record") else System.setProperty("knapshots.editor.record", previous)
+    }
+  }
+
+  @Test fun `focused diagnostics use virtual source names lines and columns`() {
+    val host = EditorSourceHost { object : EditorObservations {
+      override fun diagnostics() = listOf(EditorDiagnostic(DiagnosticSeverity.ERROR, "bad", "Other.kt:3:9"))
+      override fun reference(expression: String) = ReferenceObservation.Unresolved
+    } }
+    val extra = listOf(EditorSource("Other.kt", "one\ntwo\ninvalid"))
+    assertFailsWith<AssertionError> {
+      assertEditor("class Main", host, additionalSources = extra) { diagnostics { error("bad", line = 3) } }
+    }
+    assertEditor("class Main", host, additionalSources = extra) {
+      diagnostics { error("bad", file = "Other.kt", line = 3, column = 9) }
+    }
+    assertFailsWith<AssertionError> {
+      assertEditor("class Main", host, additionalSources = extra) { diagnostics { error("bad", file = "Other.kt", line = 3, column = 2) } }
     }
   }
 
