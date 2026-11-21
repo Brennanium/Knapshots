@@ -9,3 +9,5 @@ For the local packaging experiment, first build a compatible adapter once, then 
 The experimental `Bundled adapter compatibility` workflow builds one `0.1.0-ci` candidate against a selected baseline IDE, publishes it into a local Maven repository, and uploads that repository for every IDE matrix job. No candidate artifacts are published externally. Its default selectors cover the latest three stable Android Studio families identified on November 21, 2026. The prebuilt adapter's IDE compatibility still has to be established by the results.
 
 The default KPaths fixture branch uses the Gradle plugin ID `dev.kpaths.compiler`. When testing a KPaths checkout that uses a different ID, set `KPATHS_GRADLE_PLUGIN_ID` to that checkout's declared ID.
+
+The adapter workflow uses Knapshots' own compiler fixture and does not check out KPaths. A separate, manually dispatched KPaths workflow builds its own bundled candidate and runs this consumer test, including KPaths' own KEFS preparation and checks. A failure in the KPaths integration therefore does not mark the adapter workflow as failed.

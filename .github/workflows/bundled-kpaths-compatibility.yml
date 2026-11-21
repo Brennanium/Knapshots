@@ -1,0 +1,107 @@
+name: Bundled KPaths integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      ide_versions:
+        description: JSON array of Android Studio release selectors
+        required: true
+        default: '["2026.2.2.10", "2026.2.1.8", "2026.1.4.8"]'
+      baseline_ide:
+        description: IDE used once to compile the candidate adapter
+        required: true
+        default: '2026.1.4.8'
+      kpaths_ref:
+        description: KPaths fixture branch or commit
+        required: true
+        default: ci/ide-compatibility/knapshots-integration
+permissions:
+  contents: read
+jobs:
+  candidate:
+    name: Build one bundled candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: '25' }
+      - name: Save JDK 25 path
+        run: echo "KNAPSHOTS_JDK25=$JAVA_HOME" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build and publish candidate locally
+        env:
+          KNAPSHOTS_CHECKOUT: ${{ github.workspace }}
+          KNAPSHOTS_VERSION: 0.1.0-ci
+          BASELINE_IDE: ${{ inputs.baseline_ide || '2026.1.4.8' }}
+        run: |
+          export GRADLE_OPTS="-Dorg.gradle.java.installations.paths=$KNAPSHOTS_JDK25"
+          ./gradlew -p ci/bundled-adapter-build-matrix editorCompatibility --ide-version "$BASELINE_IDE" --no-configuration-cache
+      - uses: actions/upload-artifact@v6
+        with:
+          name: bundled-adapter-candidate
+          path: build/consumer-repository/
+          if-no-files-found: error
+  kpaths:
+    needs: candidate
+    name: KPaths / Studio ${{ matrix.ide }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        ide: ${{ fromJSON(inputs.ide_versions || '["2026.2.2.10", "2026.2.1.8", "2026.1.4.8"]') }}
+    steps:
+      - uses: actions/checkout@v6
+        with: { path: knapshots }
+      - uses: actions/checkout@v6
+        with:
+          repository: Brennanium/KPaths
+          ref: ${{ inputs.kpaths_ref || 'ci/ide-compatibility/knapshots-integration' }}
+          path: kpaths
+      - uses: actions/download-artifact@v7
+        with:
+          name: bundled-adapter-candidate
+          path: knapshots/build/consumer-repository
+      - uses: actions/setup-python@v6
+        with: { python-version: '3.11' }
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: '25' }
+      - name: Save JDK 25 path
+        run: echo "KPATHS_JDK25=$JAVA_HOME" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install virtual display
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+      - name: Verify the bundled candidate with KPaths
+        env:
+          KPATHS_CHECKOUT: ${{ github.workspace }}/kpaths
+          KNAPSHOTS_CHECKOUT: ${{ github.workspace }}/knapshots
+          KNAPSHOTS_REPOSITORY: ${{ github.workspace }}/knapshots/build/consumer-repository
+          KNAPSHOTS_VERSION: 0.1.0-ci
+          IDE_VERSION: ${{ matrix.ide }}
+        run: |
+          export GRADLE_OPTS="-Dorg.gradle.java.installations.paths=$KPATHS_JDK25"
+          knapshots/gradlew -p knapshots/ci/bundled-adapter-kpaths-matrix editorCompatibility --ide-version "$IDE_VERSION" --no-configuration-cache
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: bundled-kpaths-${{ strategy.job-index }}
+          path: |
+            knapshots/ci/bundled-adapter-kpaths-matrix/build/reports/knapshots/
+            knapshots/ci/bundled-adapter-consumer/build/reports/tests/
+            knapshots/ci/bundled-adapter-consumer/build/test-results/
+            knapshots/ci/bundled-adapter-consumer/build/reports/editor-inspections/
+            knapshots/ci/bundled-adapter-consumer/build/editor-inspections/**/project/build.gradle.kts
+            knapshots/ci/bundled-adapter-consumer/build/editor-inspections/**/project/settings.gradle.kts
+            knapshots/ci/bundled-adapter-consumer/build/editor-inspections/**/project/.idea/gradle.xml
+            knapshots/ci/bundled-adapter-smoke/build/reports/
+            knapshots/ci/bundled-adapter-smoke/build/test-results/
+            kpaths/kpaths-kefs-ide-fixture/build/reports/tests/
+            kpaths/kpaths-kefs-ide-fixture/build/test-results/
+            kpaths/kpaths-kefs-ide-fixture/build/consumer-probe*.log
+          if-no-files-found: warn
+          include-hidden-files: true

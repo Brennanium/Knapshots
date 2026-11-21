@@ -7,6 +7,14 @@ knapshots {
   idePath.set(file(requireNotNull(System.getenv("KNAPSHOTS_IDE_PATH"))))
   wrapperRoot.set(file(requireNotNull(System.getenv("KNAPSHOTS_WRAPPER_ROOT"))))
   kotlinVersion.set("2.4.21")
+  repository.set(file(requireNotNull(System.getenv("KNAPSHOTS_FIXTURE_REPOSITORY"))))
+  gradlePlugin { id.set("dev.knapshots.testing.fixture"); version.set("1.0.0") }
+  idePlugin { kefs {
+    version.set(requireNotNull(System.getenv("KNAPSHOTS_KEFS_VERSION")))
+    idePlugin.set("dev.knapshots.testing:fixture-compiler")
+    repository.set(file(requireNotNull(System.getenv("KNAPSHOTS_FIXTURE_REPOSITORY"))))
+    archive.set(file(requireNotNull(System.getenv("KNAPSHOTS_KEFS_ARCHIVE"))))
+  } }
 }
 dependencies {
   testImplementation("io.github.brennanium:knapshots-editor-junit:$knapshotsVersion")
