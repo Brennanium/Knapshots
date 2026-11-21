@@ -18,11 +18,13 @@ public class GradleEditorHostProvider : EditorHostProvider {
     fun optional(name: String): String? = System.getProperty("knapshots.editor.$name")
     fun quote(value: String) = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$") + "\""
     fun xml(value: String) = value.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;").replace(">", "&gt;")
-    val adapterArchive = optional("adapterArchive")?.let { Path.of(it).toRealPath() }
+    val adapterArchive = optional("adapterArchive")?.let { Path.of(it).toRealPath() } ?: bundledEditorAdapter()
     val runnerRoot = optional("runnerRoot")?.let { Path.of(it).toRealPath() }
     val wrapperRoot = optional("wrapperRoot")?.let { Path.of(it).toRealPath() }
       ?: runnerRoot ?: Path.of(System.getProperty("user.dir")).toRealPath()
-    require(adapterArchive != null || runnerRoot != null) { "Configure the IDE adapter archive or launcher checkout." }
+    require(adapterArchive != null || runnerRoot != null) {
+      "No bundled IDE adapter was found. Use a Knapshots release containing an adapter, or configure an adapter archive or launcher checkout."
+    }
     val ide = Path.of(required("idePath")).toRealPath()
     val javaHome = ideJavaHome(ide)
     val kotlin = required("kotlinVersion")
@@ -114,3 +116,23 @@ internal fun editorGradleSettings(): String = """
 internal fun installedIdeBuild(ide: Path): String? = listOf(
   ide.resolve("Contents/Resources/build.txt"), ide.resolve("build.txt"),
 ).firstOrNull(Files::isRegularFile)?.let { Files.readString(it).trim().takeIf(String::isNotEmpty) }
+
+/** Extract the published, prebuilt test adapter without requiring a Knapshots checkout. */
+internal fun bundledEditorAdapter(): Path? {
+  val resource = GradleEditorHostProvider::class.java.getResourceAsStream(
+    "/dev/knapshots/testing/ide/editor-adapter.zip",
+  ) ?: return null
+  return extractEditorAdapter(resource)
+}
+
+internal fun extractEditorAdapter(resource: java.io.InputStream): Path {
+  val archive = Files.createTempFile("knapshots-editor-adapter-", ".zip")
+  try {
+    resource.use { Files.copy(it, archive, java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
+    archive.toFile().deleteOnExit()
+    return archive
+  } catch (error: Throwable) {
+    Files.deleteIfExists(archive)
+    throw error
+  }
+}

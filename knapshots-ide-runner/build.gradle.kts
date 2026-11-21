@@ -62,3 +62,28 @@ tasks.test {
     providers.gradleProperty("knapshots.$name").orNull?.let { systemProperty("knapshots.$name", it) }
   }
 }
+
+// Build a release-shaped runner only after building the IDE adapter. A separate Jar task
+// avoids a cycle: buildPlugin itself needs the ordinary, unbundled runner JAR.
+val releaseAdapter = providers.gradleProperty("knapshots.releaseAdapterArchive")
+if (releaseAdapter.isPresent) {
+  val bundledJar = tasks.register<Jar>("bundledEditorRunnerJar") {
+    dependsOn(tasks.named("jar"))
+    doFirst { require(file(releaseAdapter.get()).isFile) { "Editor adapter archive does not exist: ${releaseAdapter.get()}" } }
+    archiveClassifier.set("bundled-adapter")
+    from(zipTree(tasks.named<Jar>("jar").flatMap { it.archiveFile }))
+    from(file(releaseAdapter.get())) {
+      into("dev/knapshots/testing/ide")
+      rename { "editor-adapter.zip" }
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+  }
+  afterEvaluate { extensions.configure<org.gradle.api.publish.PublishingExtension> {
+    publications.named<org.gradle.api.publish.maven.MavenPublication>("library") {
+      val original = artifacts.single { it.extension == "jar" && it.classifier == null }
+      artifacts.remove(original)
+      artifact(bundledJar) { classifier = null }
+    }
+  } }
+  tasks.withType<org.gradle.api.publish.tasks.GenerateModuleMetadata>().configureEach { enabled = false }
+}
