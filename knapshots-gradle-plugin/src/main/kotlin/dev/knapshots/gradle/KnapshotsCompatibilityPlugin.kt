@@ -57,7 +57,7 @@ public class KnapshotsCompatibilityPlugin : Plugin<Project> {
     val recorder = project.configurations.create("knapshotsEditorRecorder") {
       it.isCanBeConsumed = false
       it.defaultDependencies { dependencies ->
-        dependencies.add(project.dependencies.create("dev.knapshots:knapshots-compiler:${versionProperties.getProperty("version")}"))
+        dependencies.add(project.dependencies.create("io.github.brennanium:knapshots-compiler:${versionProperties.getProperty("version")}"))
       }
     }
     val editorProject = project.extensions.create("knapshots", KnapshotsExtension::class.java)
@@ -105,14 +105,14 @@ public class KnapshotsCompatibilityPlugin : Plugin<Project> {
       }
       val editorDeclared = project.configurations.filter { it.name.endsWith("RuntimeClasspath") }.any { configuration ->
         configuration.allDependencies.any { dependency ->
-          dependency.group == "dev.knapshots" && (dependency.name.startsWith("knapshots-editor") || dependency.name == "knapshots-intellij-fixture")
+          dependency.group == "io.github.brennanium" && (dependency.name.startsWith("knapshots-editor") || dependency.name == "knapshots-intellij-fixture")
         }
       }
       // Gradle TestKit is distributed with Gradle, not through the published host artifacts.
       // Supply it when the consumer uses one of the Gradle-backed compiler or KSP hosts.
       project.configurations.filter { it.name.endsWith("RuntimeClasspath") }.forEach { configuration ->
         val usesGradleHost = configuration.allDependencies.any { dependency ->
-          dependency.group == "dev.knapshots" && (dependency.name == "knapshots-ksp" || dependency.name == "knapshots-compiler-gradle")
+          dependency.group == "io.github.brennanium" && (dependency.name == "knapshots-ksp" || dependency.name == "knapshots-compiler-gradle")
         }
         val runtimeOnly = configuration.name.removeSuffix("RuntimeClasspath") + "RuntimeOnly"
         if (usesGradleHost && project.configurations.findByName(runtimeOnly) != null) {

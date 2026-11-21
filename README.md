@@ -1,14 +1,57 @@
 # Knapshots
 
-Knapshots is a Kotlin testing toolkit for snapshot assertions, compiler plugins, KSP processors, and editor behavior.
+Snapshot testing tools for Kotlin values, compiler plugins, KSP processors, and editor behavior.
+
+Knapshots is based on Point-Free's [SnapshotTesting](https://github.com/pointfreeco/swift-snapshot-testing) and [MacroTesting](https://github.com/pointfreeco/swift-macro-testing). It brings their snapshot-driven testing style to Kotlin compiler and IDE tooling.
+
+## Usage
+
+Write a test with the source you want to check:
 
 ```kotlin
-assertCompiler("""
-  @GenerateGreeting class Person
-""")
+import dev.knapshots.testing.ksp.assertKsp
+import org.junit.jupiter.api.Test
+
+class GreetingProcessorTest {
+  @Test fun `generates a greeting`() {
+    assertKsp("""
+      @GenerateGreeting class Person
+    """)
+  }
+}
 ```
 
-Run the test to record the available output and diagnostics inline, review the result, and run it again to check future changes. The same workflow works for KSP and editor diagnostics. Knapshots also offers text snapshots, JVM bytecode inspection, and compatibility testing across Kotlin and IDE versions.
+On the first run, Knapshots records generated source and diagnostics inline and fails the test so you can review them. Run it again to compare future output with the recorded snapshots. If something changes, the failure shows the changed lines:
+
+```diff
+− expected / + actual
+@@ -1,3 +1,3 @@
+  object PersonGreeting {
+−   fun greet() = "Hello, Person!"
++   fun greet() = "Welcome, Person!"
+  }
+```
+
+Use `assertCompiler` to check a compiler plugin's output and diagnostics, `assertEditor` to check what an IDE reports, and `assertSnapshot` to compare a value using a snapshot strategy. See the [documentation](#documentation) for examples and setup.
+
+## Installation
+
+> Knapshots has not been published yet. The following shows the intended setup for the first `0.1.0` release; these dependencies will resolve after publication.
+
+Add Maven Central to plugin and dependency resolution, then apply the Knapshots Gradle plugin and add the module you need:
+
+```kotlin
+plugins {
+  kotlin("jvm") version "2.4.21"
+  id("io.github.brennanium.knapshots.compatibility") version "0.1.0"
+}
+
+dependencies {
+  testImplementation("io.github.brennanium:knapshots-ksp:0.1.0")
+}
+```
+
+Knapshots can discover a processor declared in the current project using the standard KSP service registration. See [Getting started](docs/GETTING-STARTED.md) for repositories, test dependencies, compiler plugins, and editor setup.
 
 ## Documentation
 
@@ -19,14 +62,12 @@ Run the test to record the available output and diagnostics inline, review the r
 - [Testing editor behavior](docs/EDITOR.md)
 - [Compatibility testing](docs/COMPATIBILITY.md)
 
-Knapshots is under active development and has not been published to a public registry. The getting-started guide explains how to use a locally published build. Full editor tests currently require an IDE-compatible adapter archive or a checkout; the guide explains the current options.
-
 ## Development
 
-Run `./gradlew check` to verify the library. Run `./gradlew verifyPublishedConsumer` to publish to a local repository and test a separate Gradle consumer. To build the documentation site, install `docs/requirements.txt` and run `./gradlew docsBuild`. Use `./gradlew docsServe` to view the site locally.
+Run `./gradlew check` to verify the library. Run `./gradlew verifyReleaseConsumer` to test the unpublished `0.1.0` artifacts in a separate Gradle consumer. To build the documentation site, install `docs/requirements.txt` and run `./gradlew docsBuild`; use `./gradlew docsServe` to view it locally.
 
-## Inspiration
+Knapshots' compiler and IDE compatibility work also draws lessons from [Metro](https://github.com/ZacSweers/metro) and [kotlin-structural-typing](https://github.com/obabichev/kotlin-structural-typing).
 
-Knapshots is inspired by Point-Free's [SnapshotTesting](https://github.com/pointfreeco/swift-snapshot-testing), [MacroTesting](https://github.com/pointfreeco/swift-macro-testing), and [CompilationTesting](https://github.com/pointfreeco/swift-compilation-testing). Its compiler and IDE compatibility work also draws lessons from [Metro](https://github.com/ZacSweers/metro) and [kotlin-structural-typing](https://github.com/obabichev/kotlin-structural-typing).
+## License
 
-Knapshots is released under the [MIT License](LICENSE).
+Knapshots is available under the [MIT License](LICENSE).

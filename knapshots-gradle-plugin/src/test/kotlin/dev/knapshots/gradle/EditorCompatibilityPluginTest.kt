@@ -13,7 +13,7 @@ class EditorCompatibilityPluginTest {
     Files.writeString(dir.resolve("settings.gradle.kts"), "rootProject.name = \"consumer\"")
     Files.writeString(dir.resolve("compiler.jar"), "test compiler artifact")
     Files.writeString(dir.resolve("build.gradle.kts"), """
-      plugins { java; id("dev.knapshots.compatibility") }
+      plugins { java; id("io.github.brennanium.knapshots.compatibility") }
       knapshots {
         recording.set("missing")
         recordCompilerVersion.set(true)
@@ -40,7 +40,7 @@ class EditorCompatibilityPluginTest {
     Files.writeString(dir.resolve("settings.gradle.kts"), "rootProject.name = \"consumer\"")
     fun build(extra: String, assertion: String) {
       Files.writeString(dir.resolve("build.gradle.kts"), """
-        plugins { `java-gradle-plugin`; id("dev.knapshots.compatibility") }
+        plugins { `java-gradle-plugin`; id("io.github.brennanium.knapshots.compatibility") }
         gradlePlugin { plugins {
           create("first") { id = "example.first"; implementationClass = "example.Plugin" }
           $extra
@@ -63,7 +63,7 @@ class EditorCompatibilityPluginTest {
     Files.createDirectories(dir.resolve("gradle"))
     Files.writeString(dir.resolve("gradle/libs.versions.toml"), "[versions]\nkotlin = \"2.4.21\"\n")
     Files.writeString(dir.resolve("build.gradle.kts"), """
-      plugins { java; id("dev.knapshots.compatibility") }
+      plugins { java; id("io.github.brennanium.knapshots.compatibility") }
       version = "3.4.5"
       val fixture = layout.projectDirectory.file("runtime.jar")
       tasks.named<Test>("test") { classpath = files(fixture) }
@@ -113,7 +113,7 @@ class EditorCompatibilityPluginTest {
     Files.createDirectories(service.parent)
     Files.writeString(service, "fixture.Registrar")
     Files.writeString(dir.resolve("build.gradle.kts"), """
-      plugins { java; id("dev.knapshots.compatibility") }
+      plugins { java; id("io.github.brennanium.knapshots.compatibility") }
       tasks.register("probeCompiler") { dependsOn("jar"); doLast {
         val args = tasks.named<Test>("test").get().jvmArgumentProviders.flatMap { it.asArguments() }
         check(args.any { it.startsWith("-Dknapshots.compiler.pluginJar=") && it.endsWith("consumer.jar") })
@@ -132,7 +132,7 @@ class EditorCompatibilityPluginTest {
     Files.writeString(service, "fixture.Provider")
     fun run(override: String, expected: String) {
       Files.writeString(dir.resolve("build.gradle.kts"), """
-        plugins { java; id("dev.knapshots.compatibility") }
+        plugins { java; id("io.github.brennanium.knapshots.compatibility") }
         knapshots { ksp { processorClasspath.from(files("processor.jar")); $override } }
         tasks.register("probeKsp") { doLast {
           val args = tasks.named<Test>("test").get().jvmArgumentProviders.flatMap { it.asArguments() }
@@ -156,8 +156,8 @@ class EditorCompatibilityPluginTest {
       includeBuild("$sourceRoot")
     """.trimIndent())
     Files.writeString(dir.resolve("build.gradle.kts"), """
-      plugins { java; id("dev.knapshots.compatibility") }
-      dependencies { testImplementation("dev.knapshots:knapshots-editor:0.1.0-SNAPSHOT") }
+      plugins { java; id("io.github.brennanium.knapshots.compatibility") }
+      dependencies { testImplementation("io.github.brennanium:knapshots-editor:0.1.0-SNAPSHOT") }
       knapshots { recording.set("missing") }
       tasks.register("probe") { doLast {
         val args = tasks.named<Test>("test").get().jvmArgumentProviders.flatMap { it.asArguments() }
@@ -199,7 +199,7 @@ class EditorCompatibilityPluginTest {
     Files.writeString(driver, "#!/bin/sh\nprintf '%s\\n' \"\$2\" >> ide.txt\nprintf '%s\\n' \"\$KNAPSHOTS_IDE_PATH\" > ide-env.txt\nprintf '%s\\n' \"\$KPATHS_TEST_CHECKOUT\" > checkout-env.txt\nprintf '%s\\n' \"\$KNAPSHOTS_IDE_RELEASE_BUILD|\$KNAPSHOTS_IDE_RELEASE_VERSION|\$KNAPSHOTS_IDE_RELEASE_NAME\" > release-env.txt\necho editor-driver-ran\n")
     check(driver.toFile().setExecutable(true))
     Files.writeString(dir.resolve("build.gradle.kts"), """
-      plugins { id("dev.knapshots.compatibility") }
+      plugins { id("io.github.brennanium.knapshots.compatibility") }
       knapshotsCompatibility {
         editorDriver.set(layout.projectDirectory.file("editor-driver.sh"))
         releaseFeed.set(layout.projectDirectory.file("releases.xml"))
@@ -225,7 +225,7 @@ class EditorCompatibilityPluginTest {
 
   @Test fun `writes failure report when driver is missing`(@TempDir dir: Path) {
     Files.writeString(dir.resolve("settings.gradle.kts"), "rootProject.name = \"consumer\"")
-    Files.writeString(dir.resolve("build.gradle.kts"), "plugins { id(\"dev.knapshots.compatibility\") }")
+    Files.writeString(dir.resolve("build.gradle.kts"), "plugins { id(\"io.github.brennanium.knapshots.compatibility\") }")
     GradleRunner.create().withProjectDir(dir.toFile()).withPluginClasspath()
       .withArguments("editorCompatibility", "--ide-version", "2026.2.2.8").buildAndFail()
     val report = Files.readString(dir.resolve("build/reports/knapshots/editor-compatibility.json"))

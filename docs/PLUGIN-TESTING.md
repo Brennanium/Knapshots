@@ -201,7 +201,7 @@ Both implement `CompilerHost`, so either can drive `assertCompiler`. Configure a
 
 `knapshots-intellij-fixture` adapts IntelliJ's `BasePlatformTestCase` and `CodeInsightTestFixture` to `assertEditor`. Extend `EditorFixtureTestCase` to use its source-hosting assertion, or use `IntellijEditorObservations` with an existing fixture. Provide the IntelliJ platform test framework and the IDE-compatible compiler/plugin setup in your own test project.
 
-This optional adapter is a separate build because it compiles against a selected IDE. From a Knapshots checkout, `./gradlew -p knapshots-intellij-fixture test -Pknapshots.idePath=/path/to/ide` verifies it without launching a full IDE. A composite consumer can include the Knapshots build and `knapshots-intellij-fixture`, then depend on `dev.knapshots:knapshots-intellij-fixture`. These lightweight tests do not prove Gradle import, KEFS loading, or full IDE behavior.
+This optional adapter is a separate build because it compiles against a selected IDE. From a Knapshots checkout, `./gradlew -p knapshots-intellij-fixture test -Pknapshots.idePath=/path/to/ide` verifies it without launching a full IDE. A composite consumer can include the Knapshots build and `knapshots-intellij-fixture`, then depend on `io.github.brennanium:knapshots-intellij-fixture`. These lightweight tests do not prove Gradle import, KEFS loading, or full IDE behavior.
 
 ### Quick fixes
 

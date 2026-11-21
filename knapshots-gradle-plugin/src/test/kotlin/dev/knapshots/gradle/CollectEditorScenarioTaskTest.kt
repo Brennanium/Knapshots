@@ -12,7 +12,7 @@ class CollectEditorScenarioTaskTest {
   @Test fun `collects passing and skipped reports and rejects traversal`(@TempDir dir: Path) {
     Files.writeString(dir.resolve("settings.gradle.kts"), "rootProject.name = \"consumer\"")
     Files.writeString(dir.resolve("build.gradle.kts"), """
-      plugins { id("dev.knapshots.compatibility") }
+      plugins { id("io.github.brennanium.knapshots.compatibility") }
       knapshotsCompatibility { scenarioJUnitXml.set(layout.projectDirectory.file("result.xml")) }
     """.trimIndent())
     val report = dir.resolve("result.xml")

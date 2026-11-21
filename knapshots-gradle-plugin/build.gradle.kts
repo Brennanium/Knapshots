@@ -14,7 +14,7 @@ dependencies {
 gradlePlugin {
   plugins {
     create("knapshotsCompatibility") {
-      id = "dev.knapshots.compatibility"
+      id = "io.github.brennanium.knapshots.compatibility"
       implementationClass = "dev.knapshots.gradle.KnapshotsCompatibilityPlugin"
     }
   }

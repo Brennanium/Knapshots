@@ -22,7 +22,7 @@ The existing KPaths implementation is the migration reference:
 - `.github/workflows/ide-compatibility.yml` runs version entries on Linux and macOS, provisions
   Xvfb on Linux, and collects machine-readable results and logs.
 
-Apply `dev.knapshots.compatibility` and configure the executable drivers:
+Apply `io.github.brennanium.knapshots.compatibility` and configure the executable drivers:
 
 ```kotlin
 knapshotsCompatibility {
@@ -71,10 +71,11 @@ knapshots {
   gradlePlugin { id.set("example.gradle-plugin") }
   repository.set(layout.projectDirectory.dir("build/local-maven"))
   idePath.set(file("/path/to/Android Studio.app"))
-  runnerRoot.set(file("/path/to/Knapshots"))
+  adapterArchive.set(file("/path/to/knapshots-ide-adapter.zip"))
   idePlugin {
     kefs {
       version.set("0.5.0-262")
+      archive.set(file("/path/to/kefs.zip"))
       idePlugin.set("example:example-compiler-plugin-jvm")
       repository.set(layout.projectDirectory.dir("build/ide-maven"))
     }
@@ -82,7 +83,7 @@ knapshots {
 }
 ```
 
-This example uses a Knapshots checkout to build the adapter and a local repository containing the IDE-compatible artifact. `runnerRoot` is inferred from `KNAPSHOTS_CHECKOUT` when that environment variable is set, and `idePath` can be supplied with `KNAPSHOTS_IDE_PATH`. Choose the KEFS version compatible with the selected IDE. The plugin ID tells the generated Gradle project which plugin to apply. The optional KEFS `idePlugin` identifies the IDE artifact that KEFS loads; it is written as Maven group and artifact (`group:artifact`), without a version. In this example the build compiler artifact is also named `example:example-compiler-plugin-jvm`, so KEFS can match it.
+The adapter archive is not distributed yet; the example shows the current configuration once a compatible archive is available. The IDE-compatible compiler artifact is supplied through the configured IDE repository. `idePath` can be supplied with `KNAPSHOTS_IDE_PATH`. Choose the KEFS version and archive compatible with the selected IDE. The plugin ID tells the generated Gradle project which plugin to apply. The optional KEFS `idePlugin` identifies the IDE artifact that KEFS loads; it is written as Maven group and artifact (`group:artifact`), without a version. In this example the build compiler artifact is also named `example:example-compiler-plugin-jvm`, so KEFS can match it.
 
 Knapshots uses the test task's runtime classpath as the generated project's dependencies. It takes the Kotlin version from the applied Kotlin JVM plugin when available, falling back to the `libs` version catalog's `kotlin` entry, and takes the plugin version from the Gradle project version; each can be overridden explicitly. Projects with a separate consumer classpath or a plugin version unrelated to their project version should configure those values explicitly. When the project declares exactly one Gradle plugin using `java-gradle-plugin`, Knapshots can also infer its ID, so the `gradlePlugin` block can be omitted. If there are multiple declarations, select the plugin explicitly. For the current KEFS lookup, Knapshots can infer the IDE artifact from an already applied Kotlin compiler Gradle plugin. A separately named IDE artifact requires an additional mapping and is not yet supported by this default lookup.
 

@@ -4,7 +4,7 @@ plugins {
   id("org.jetbrains.intellij.platform") version "2.19.0"
 }
 
-group = "dev.knapshots"
+group = "io.github.brennanium"
 version = "0.1.0-SNAPSHOT"
 
 repositories { mavenCentral(); intellijPlatform { defaultRepositories() } }
@@ -17,7 +17,7 @@ dependencies {
     testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform, configurationName = "compileOnly")
     testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
   }
-  api("dev.knapshots:knapshots-editor:0.1.0-SNAPSHOT")
+  api("io.github.brennanium:knapshots-editor:0.1.0-SNAPSHOT")
   compileOnly("junit:junit:4.13.2")
   testImplementation(kotlin("test"))
 }
@@ -40,7 +40,7 @@ val isolatedRecorder = configurations.create("isolatedRecorder")
 val ideKotlinStdlib = configurations.create("ideKotlinStdlib") { isTransitive = false }
 dependencies {
   ideKotlinStdlib("org.jetbrains.kotlin:kotlin-stdlib:2.4.21")
-  isolatedRecorder("dev.knapshots:knapshots-compiler:0.1.0-SNAPSHOT")
+  isolatedRecorder("io.github.brennanium:knapshots-compiler:0.1.0-SNAPSHOT")
 }
 tasks.test {
   systemProperty("knapshots.editor.record", providers.gradleProperty("knapshots.recording").orElse("none").get())

@@ -16,4 +16,4 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew check verifyPublishedConsumer
+      - run: ./gradlew check verifyPublishedConsumer -PVERSION_NAME=0.1.0

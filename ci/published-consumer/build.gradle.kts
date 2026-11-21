@@ -2,8 +2,10 @@ import java.io.File
 
 plugins {
   kotlin("jvm") version "2.4.21"
-  id("dev.knapshots.compatibility") version "0.1.0-SNAPSHOT"
+  id("io.github.brennanium.knapshots.compatibility")
 }
+
+val knapshotsVersion = providers.gradleProperty("knapshotsVersion").getOrElse("0.1.0-SNAPSHOT")
 
 knapshots {
   compilerPlugin {
@@ -16,11 +18,11 @@ knapshots {
 
 dependencies {
   compileOnly("com.google.devtools.ksp:symbol-processing-api:2.3.12")
-  testImplementation("dev.knapshots:knapshots-compiler:0.1.0-SNAPSHOT")
-  testImplementation("dev.knapshots:knapshots-compiler-gradle:0.1.0-SNAPSHOT")
-  testImplementation("dev.knapshots:knapshots-ksp:0.1.0-SNAPSHOT")
-  testImplementation("dev.knapshots:knapshots-editor-junit:0.1.0-SNAPSHOT")
-  testImplementation("dev.knapshots:knapshots-bytecode:0.1.0-SNAPSHOT")
+  testImplementation("io.github.brennanium:knapshots-compiler:${knapshotsVersion}")
+  testImplementation("io.github.brennanium:knapshots-compiler-gradle:${knapshotsVersion}")
+  testImplementation("io.github.brennanium:knapshots-ksp:${knapshotsVersion}")
+  testImplementation("io.github.brennanium:knapshots-editor-junit:${knapshotsVersion}")
+  testImplementation("io.github.brennanium:knapshots-bytecode:${knapshotsVersion}")
   testImplementation(kotlin("test"))
   testImplementation("org.junit.jupiter:junit-jupiter:5.13.4")
   testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.13.4")

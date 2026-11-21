@@ -3,7 +3,7 @@ plugins {
   id("org.jetbrains.dokka") version "2.2.0"
 }
 
-group = "dev.knapshots"
+group = "io.github.brennanium"
 version = providers.gradleProperty("VERSION_NAME").orElse("0.1.0-SNAPSHOT").get()
 
 allprojects {
@@ -132,5 +132,15 @@ tasks.register<Exec>("verifyPublishedConsumer") {
   environment("KNAPSHOTS_FIXTURE_COMPILER", compilerJar.get().asFile.absolutePath)
   val wrapper = if (System.getProperty("os.name").startsWith("Windows")) "gradlew.bat" else "./gradlew"
   workingDir = rootDir
-  commandLine(wrapper, "-p", "ci/published-consumer", "test", "--refresh-dependencies", "--no-daemon")
+  commandLine(wrapper, "-p", "ci/published-consumer", "test", "-PknapshotsVersion=${project.version}", "--refresh-dependencies", "--no-daemon")
+}
+
+
+/** Exercise the same consumer with stable, release-shaped coordinates. */
+tasks.register<Exec>("verifyReleaseConsumer") {
+  group = "verification"
+  description = "Tests an unpublished local 0.1.0 release as a normal Maven consumer."
+  val wrapper = if (System.getProperty("os.name").startsWith("Windows")) "gradlew.bat" else "./gradlew"
+  workingDir = rootDir
+  commandLine(wrapper, "verifyPublishedConsumer", "-PVERSION_NAME=0.1.0", "--no-daemon")
 }

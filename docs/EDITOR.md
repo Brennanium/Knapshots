@@ -16,7 +16,7 @@ An input-only `assertEditor(source)` records the editor's diagnostics inline. Yo
 
 Add `knapshots-editor-junit` and `knapshots-ide-runner`, and apply the Knapshots Gradle plugin. Configure the Gradle plugin under test and its IDE integration once for the test project. The [editor setup guide](COMPATIBILITY.md#editor-assertions-in-junit) shows the current configuration and which settings are inferred.
 
-The full imported-project host currently needs an IDE-compatible adapter archive or a Knapshots checkout from which to build the adapter. The adapter is not published yet. The optional [lightweight fixture](PLUGIN-TESTING.md#lightweight-intellij-fixtures) runs against an IntelliJ test fixture without importing a full project.
+The full imported-project host currently needs an IDE-compatible adapter archive. The adapter is not published yet. The optional [lightweight fixture](PLUGIN-TESTING.md#lightweight-intellij-fixtures) runs against an IntelliJ test fixture without importing a full project.
 
 ## Check a quick fix
 

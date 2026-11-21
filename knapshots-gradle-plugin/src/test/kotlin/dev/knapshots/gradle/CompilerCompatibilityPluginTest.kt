@@ -17,7 +17,7 @@ class CompilerCompatibilityPluginTest {
     Files.writeString(driver, "#!/bin/sh\nprintf '%s\\n' \"\$2\" >> versions.txt\necho driver-message-\"\$2\"\n")
     check(driver.toFile().setExecutable(true))
     Files.writeString(dir.resolve("build.gradle.kts"), """
-      plugins { id("dev.knapshots.compatibility") }
+      plugins { id("io.github.brennanium.knapshots.compatibility") }
       knapshotsCompatibility { compilerDriver.set(layout.projectDirectory.file("driver.sh")) }
     """.trimIndent())
 
@@ -46,7 +46,7 @@ class CompilerCompatibilityPluginTest {
     Files.writeString(driver, "#!/bin/sh\nprintf '%s\\n' \"\$2\" >> versions.txt\n")
     check(driver.toFile().setExecutable(true))
     Files.writeString(dir.resolve("build.gradle.kts"), """
-      plugins { id("dev.knapshots.compatibility") }
+      plugins { id("io.github.brennanium.knapshots.compatibility") }
       knapshotsCompatibility { compilerDriver.set(layout.projectDirectory.file("driver.sh")) }
     """.trimIndent())
     runner(dir).withArguments(
@@ -64,7 +64,7 @@ class CompilerCompatibilityPluginTest {
     Files.writeString(driver, "#!/bin/sh\nprintf '%s\\n' \"\$*\" > args.txt\nprintf '%s\\n' \"\$KPATHS_TEST_CHECKOUT\" > env.txt\necho 'KNAPSHOTS_CHECK jvm passed'\necho 'KNAPSHOTS_CHECK native not-run'\n")
     check(driver.toFile().setExecutable(true))
     Files.writeString(dir.resolve("build.gradle.kts"), """
-      plugins { id("dev.knapshots.compatibility") }
+      plugins { id("io.github.brennanium.knapshots.compatibility") }
       knapshotsCompatibility {
         compilerDriver.set(layout.projectDirectory.file("driver.sh"))
         driverEnvironment.put("KPATHS_TEST_CHECKOUT", "/custom checkout")
@@ -81,7 +81,7 @@ class CompilerCompatibilityPluginTest {
 
   @Test fun `a missing driver fails clearly`(@TempDir dir: Path) {
     Files.writeString(dir.resolve("settings.gradle.kts"), "rootProject.name = \"consumer\"")
-    Files.writeString(dir.resolve("build.gradle.kts"), "plugins { id(\"dev.knapshots.compatibility\") }")
+    Files.writeString(dir.resolve("build.gradle.kts"), "plugins { id(\"io.github.brennanium.knapshots.compatibility\") }")
     val result = runner(dir).withArguments("compilerCompatibility", "--kotlin-version", "2.4.21").buildAndFail()
     assertContains(result.output, "Configure knapshotsCompatibility.compilerDriver")
   }

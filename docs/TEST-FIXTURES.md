@@ -10,7 +10,7 @@ The recording tests also cover nested and qualified calls, preserving neighborin
 
 ## Coverage to expand
 
-[CompilationTesting's beta preview](https://www.pointfree.co/blog/posts/234-beta-preview-compilationtesting) also motivates testing source-level compiler guarantees and recording diagnostics. The fixture and assertion APIs do not yet cover every behavior from MacroTesting or CompilationTesting. In particular, future work includes:
+The fixture and assertion APIs continue to grow. Future work includes:
 
 - More declaration shapes and visibility cases beyond the generated functions and properties, nested and generic classes, and downstream JVM consumer already covered.
 - Multiline diagnostic source ranges. The embedded compiler host captures optional end positions and renders same-line ranges; multiline ranges currently fall back to a start caret.

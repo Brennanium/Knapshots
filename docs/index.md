@@ -20,4 +20,4 @@ Knapshots also compares ordinary values using [snapshot strategies](SNAPSHOTS.md
 - **[Editor assertions](EDITOR.md)** check diagnostics and reference resolution in an IDE.
 - **[Compatibility testing](COMPATIBILITY.md)** runs a project's checks against selected Kotlin and IDE versions.
 
-Start with [Getting started](GETTING-STARTED.md) to add Knapshots to a test project. Knapshots is inspired by Point-Free's [SnapshotTesting](https://github.com/pointfreeco/swift-snapshot-testing), [MacroTesting](https://github.com/pointfreeco/swift-macro-testing), and [CompilationTesting](https://github.com/pointfreeco/swift-compilation-testing).
+Start with [Getting started](GETTING-STARTED.md) to add Knapshots to a test project. Knapshots is based on Point-Free's [SnapshotTesting](https://github.com/pointfreeco/swift-snapshot-testing) and [MacroTesting](https://github.com/pointfreeco/swift-macro-testing).

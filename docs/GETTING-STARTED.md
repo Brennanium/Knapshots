@@ -1,46 +1,37 @@
 # Getting started
 
-Knapshots runs on JDK 17 or newer. It is under development and has not been published to a public registry yet. You can try the current checkout from a separate Gradle project using a local Maven repository.
+Add Knapshots to a test project to record and compare values, compiler output, KSP-generated source, or editor observations.
 
-## Build a local repository
+!!! note "Before the first release"
+    Knapshots has not been published yet. The `0.1.0` coordinates below describe the intended first release and will resolve after it is published.
 
-Clone [Knapshots](https://github.com/Brennanium/Knapshots), then run this command in its checkout:
+## Add Knapshots
 
-```shell
-./gradlew publishAllPublicationsToConsumerVerificationRepository
-```
-
-The repository is created at `build/consumer-repository`. Add that directory to both plugin and dependency resolution in your test project's `settings.gradle.kts`:
+Knapshots runs on JDK 17 or newer. Ensure Maven Central is available for both Gradle plugins and project dependencies in `settings.gradle.kts`:
 
 ```kotlin
 pluginManagement {
   repositories {
-    maven { url = uri("/path/to/Knapshots/build/consumer-repository") }
-    gradlePluginPortal()
     mavenCentral()
+    gradlePluginPortal()
   }
 }
 
 dependencyResolutionManagement {
-  repositories {
-    maven { url = uri("/path/to/Knapshots/build/consumer-repository") }
-    mavenCentral()
-  }
+  repositories { mavenCentral() }
 }
 ```
 
-## Add test dependencies
-
-Choose the module for the kind of assertion you need. For compiler assertions, add the plugin and the compiler module to your test project:
+Apply the Knapshots Gradle plugin and add the module you want to use to your test dependencies:
 
 ```kotlin
 plugins {
   kotlin("jvm") version "2.4.21"
-  id("dev.knapshots.compatibility") version "0.1.0-SNAPSHOT"
+  id("io.github.brennanium.knapshots.compatibility") version "0.1.0"
 }
 
 dependencies {
-  testImplementation("dev.knapshots:knapshots-compiler:0.1.0-SNAPSHOT")
+  testImplementation("io.github.brennanium:knapshots-compiler:0.1.0")
   testImplementation(kotlin("test"))
   testImplementation("org.junit.jupiter:junit-jupiter:5.13.4")
   testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.13.4")
@@ -49,12 +40,34 @@ dependencies {
 tasks.test { useJUnitPlatform() }
 ```
 
-The compatibility plugin configures the test environment. A compiler plugin test also needs the artifact and options for the plugin under test; see [Testing compiler plugins](PLUGIN-TESTING.md#configuring-compiler-assertions-today). For KSP, add `knapshots-ksp` and follow [Testing KSP processors](KSP-TESTING.md). For plain text comparisons, `knapshots-snapshots` is sufficient and the Gradle plugin is optional.
+Use `knapshots-ksp` for KSP processors, `knapshots-editor-junit` and `knapshots-ide-runner` for editor assertions, or `knapshots-snapshots` for ordinary snapshots. The Gradle plugin is optional for plain snapshot comparisons.
 
-`knapshots-compiler-gradle` and `knapshots-ksp` use Gradle TestKit. When the Knapshots Gradle plugin is applied, it supplies TestKit to the test runtime for those dependencies. Without the plugin, add `testRuntimeOnly(gradleTestKit())` yourself.
+## Test a compiler plugin
 
-## Test what the IDE sees
+When the project under test registers a `CompilerPluginRegistrar` using the standard service file, Knapshots can discover its JAR. A focused assertion can check whether source compiles:
 
-Editor assertions additionally require an IDE-compatible adapter, and IDE integrations such as KEFS need their own configuration. The adapter is not published yet; the [compatibility guide](COMPATIBILITY.md#editor-assertions-in-junit) describes the current checkout-based setup and its requirements.
+```kotlin
+assertCompiler("""
+  @GenerateGreeting class Person
+""") {
+  succeeds()
+}
+```
 
-For a complete example of resolving the local artifacts without a composite build, see [`ci/published-consumer`](https://github.com/Brennanium/Knapshots/tree/main/ci/published-consumer).
+Use [compiler assertions](COMPILER.md) to record available plugin output and diagnostics. The guide also shows how to specify an artifact or plugin capture options when Knapshots cannot infer them.
+
+## Test a KSP processor
+
+If the project registers a `SymbolProcessorProvider` in the standard service file, Knapshots discovers its JAR and runtime dependencies. Add `knapshots-ksp`, then write:
+
+```kotlin
+assertKsp("""
+  @GenerateGreeting class Person
+""")
+```
+
+Run the test to record generated source and diagnostics inline, review the result, and rerun it. The [KSP guide](KSP-TESTING.md) covers processors in other projects and version overrides. The Gradle plugin supplies TestKit for Gradle-backed hosts; without the plugin, add `testRuntimeOnly(gradleTestKit())`.
+
+## Test editor behavior
+
+[Editor assertions](EDITOR.md) check diagnostics and reference resolution in an IDE. Full imported-project tests currently require an IDE-compatible adapter archive. Adapter distribution is still being developed; the [editor setup guide](COMPATIBILITY.md#editor-assertions-in-junit) describes the current requirements.

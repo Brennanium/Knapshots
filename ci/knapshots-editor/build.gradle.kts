@@ -1,4 +1,4 @@
-plugins { id("dev.knapshots.compatibility") }
+plugins { id("io.github.brennanium.knapshots.compatibility") }
 knapshotsCompatibility {
   editorDriver.set(layout.projectDirectory.file("editor-driver.sh"))
   useXvfb.set(System.getenv("RUNNER_OS") == "Linux")
