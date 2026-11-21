@@ -10,7 +10,10 @@ knapshots {
   wrapperRoot.set(file(env("KNAPSHOTS_WRAPPER_ROOT")))
   kotlinVersion.set("2.4.21")
   repository.set(file(env("KPATHS_REPOSITORY")))
-  gradlePlugin { id.set("dev.kpaths.gradle-plugin"); version.set(kpathsVersion) }
+  gradlePlugin {
+    id.set(providers.environmentVariable("KPATHS_GRADLE_PLUGIN_ID").orElse("dev.kpaths.compiler"))
+    version.set(kpathsVersion)
+  }
   idePlugin { kefs {
     version.set(env("KNAPSHOTS_KEFS_VERSION"))
     idePlugin.set("io.github.brennanium:kpaths-compiler-plugin-jvm")
