@@ -33,12 +33,13 @@ class QuickFixAssertionsTest {
       }
     }
     assertContains(error.message.orEmpty(), "no matching fix")
-    assertFailsWith<AssertionError> {
+    val mismatch = assertFailsWith<AssertionError> {
       assertEditor("original", host(), record = SnapshotRecording.NONE) {
         diagnostics { error("bad") }
         quickFix("First") { fixedSource("wrong") }
       }
     }
+    assertContains(mismatch.message.orEmpty(), "− wrong\n+ first result")
   }
 
   @Test fun `records multiple fixes and diagnostics together`(@TempDir directory: Path) {

@@ -46,16 +46,14 @@ public fun <Value, Format> assertSnapshot(
 ) {
   val difference = compareSnapshot(value, expected, using) ?: return
   val label = name?.let { " '$it'" }.orEmpty()
-  throw AssertionError(
-    "Snapshot$label differs: ${difference.message}\n" +
-      "Expected:\n${difference.expected}\n" +
-      "Actual:\n${difference.actual}",
-  )
+  val details = if (difference.expected is String && difference.actual is String) difference.message else
+    "${difference.message}\nExpected: ${difference.expected}\nActual: ${difference.actual}"
+  throw AssertionError("Snapshot$label differs:\n$details")
 }
 
 /** Exact text comparison; callers choose how to normalize and render their output. */
 public val textSnapshotting: Snapshotting<String, String> = Snapshotting(
-  diffing = Diffing { expected, actual -> if (expected == actual) null else "Text snapshots differ" },
+  diffing = Diffing(::textDiff),
   snapshot = { it },
 )
 

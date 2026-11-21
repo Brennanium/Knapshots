@@ -221,3 +221,18 @@ assertEditor(source) {
 With recording enabled, Knapshots records each `fixedSource()` and the source diagnostics. Each fix starts from the original source, and all snapshots are written together. Specify `line = 2` on `quickFix` when the same description appears at more than one diagnostic; missing or ambiguous matches fail. You can also assert the diagnostics explicitly using `diagnostics { ... }`.
 
 This is an initial light-fixture implementation: it discovers intentions at diagnostic locations and snapshots the primary source only. Multi-file fixes and the imported-project editor host are not supported yet. Quick-fix labels and formatting can change between IDE versions; top-level `versioned` blocks can select different expectations.
+
+### Reading snapshot failures
+
+Text snapshot failures show the changed lines with nearby context. The hunk header gives line numbers for the expected and actual snapshots:
+
+```diff
+− expected / + actual
+@@ -1,3 +1,3 @@
+  class Person {
+−   val name: String
++   var name: String
+  }
+```
+
+Trailing spaces appear as `·`, trailing tabs as `⇥`, and carriage returns as `␍`. A missing final newline is called out separately. This format is shared by compiler, KSP, editor, and text snapshot assertions. For exceptionally large changed sections, Knapshots bounds the comparison work and may show the whole changed section instead of a minimal diff.

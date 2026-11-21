@@ -290,16 +290,16 @@ public fun assertKsp(
   }
   if (generatedExpectation != null) {
     if (generatedExpectation.missing) throw AssertionError("Missing generated source snapshot; enable recording to insert it.")
-    if (generatedDifference != null) throw AssertionError("Generated KSP source differs:\nExpected:\n${generatedDifference.expected}\nActual:\n${generatedDifference.actual}")
+    if (generatedDifference != null) throw AssertionError("Generated KSP source differs:\n${generatedDifference.message}")
   }
   if (expectations.hasDiagnosticSnapshot) {
     if (checkNotNull(dslExpectation).missing) throw AssertionError("Missing diagnostic snapshot; enable recording to insert it.")
-    if (dslDifference != null) throw AssertionError("KSP diagnostic snapshot differs:\nExpected:\n${dslDifference.expected}\nActual:\n${dslDifference.actual}")
+    if (dslDifference != null) throw AssertionError("KSP diagnostic snapshot differs:\n${dslDifference.message}")
   }
   fun compare(name: String, expectation: SnapshotExpectation, output: String) {
     if (expectation.missing) throw AssertionError("Missing $name snapshot; enable recording to insert it.")
     val difference = compareSnapshot(output.trimEnd('\n', '\r'), trimSnapshotIndent(expectation.forVersion(compilerVersion)).trimEnd('\n', '\r'), textSnapshotting)
-    if (difference != null) throw AssertionError("$name for Kotlin $compilerVersion differs.\nExpected:\n${difference.expected}\nActual:\n${difference.actual}")
+    if (difference != null) throw AssertionError("$name for Kotlin $compilerVersion differs.\n${difference.message}")
   }
   if (generated != null) compare("Generated KSP source", generated, actual)
   if (diagnosticSnapshot != null) compare("KSP diagnostic snapshot", diagnosticSnapshot, checkNotNull(renderedDiagnostics))

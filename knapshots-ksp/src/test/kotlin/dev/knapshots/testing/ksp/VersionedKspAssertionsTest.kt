@@ -27,6 +27,15 @@ class VersionedKspAssertionsTest {
     }
   }
 
+  @Test fun `generated source failure shows a focused diff`() {
+    val failure = assertFailsWith<AssertionError> {
+      assertKsp("input", "2.5.0", host, record = SnapshotRecording.NONE) {
+        generated("// FILE: Out.kt\nold output")
+      }
+    }
+    assertContains(failure.message.orEmpty(), "− old output\n+ version 2.5.0")
+  }
+
   @Test fun `nested versioned generated and diagnostics snapshots select independently`() {
     val compiler = KspHost { KspResult(true, mapOf("Out.kt" to "output"), diagnostics = listOf(KspDiagnostic(KspDiagnosticSeverity.WARNING, "warning", "src/main/kotlin/Main.kt", 1, 1))) }
     assertKsp("input", "2.5.0", compiler, record = SnapshotRecording.NONE) {

@@ -100,7 +100,7 @@ class EditorAssertionsTest {
       assertEditor(editor) { diagnosticsSnapshot("ERROR at A.kt:1: Different error") }
     }
     assertContains(failure.message.orEmpty(), "Diagnostic snapshot differs")
-    assertContains(failure.message.orEmpty(), "Actual:\nERROR at A.kt:1: Unknown name")
+    assertContains(failure.message.orEmpty(), "+ ERROR at A.kt:1: Unknown name")
   }
 
   @Test fun `snapshot and individual diagnostics cannot silently conflict`() {

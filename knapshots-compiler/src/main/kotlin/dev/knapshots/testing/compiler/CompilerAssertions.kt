@@ -321,7 +321,7 @@ public class CompilerExpectations internal constructor(
         failures += "Missing ${kind.name} snapshot; enable recording to insert it."
       } else {
         val difference = compareSnapshot(actual.trimEnd('\n', '\r'), trimSnapshotIndent(expected.forVersion(compilerVersion)).trimEnd('\n', '\r'), textSnapshotting)
-        if (difference != null) failures += "${kind.name} snapshot for Kotlin $compilerVersion differs:\nExpected:\n${difference.expected}\nActual:\n${difference.actual}"
+        if (difference != null) failures += "${kind.name} snapshot for Kotlin $compilerVersion differs:\n${difference.message}"
       }
     }
     if (hasDiagnosticSnapshot) {
@@ -336,7 +336,7 @@ public class CompilerExpectations internal constructor(
         failures += "Missing diagnostic snapshot; enable recording to insert it."
       } else {
         val difference = compareSnapshot(actual, trimSnapshotIndent(expectation.forVersion(compilerVersion)).trimEnd('\n', '\r'), textSnapshotting)
-        if (difference != null) failures += "Diagnostic snapshot differs:\nExpected:\n${difference.expected}\nActual:\n${difference.actual}"
+        if (difference != null) failures += "Diagnostic snapshot differs:\n${difference.message}"
       }
     }
     if (autoDiagnostics) {
@@ -515,7 +515,7 @@ public fun assertCompiler(
     check(!diagnostics.missing) { "Missing diagnostic snapshot; enable recording to insert it." }
     val difference = compareSnapshot(checkNotNull(diagnosticOutput).trimEnd('\n', '\r'),
       trimSnapshotIndent(diagnostics.forVersion(compilerVersion)).trimEnd('\n', '\r'), textSnapshotting)
-    if (difference != null) throw AssertionError("Diagnostic snapshot differs:\nExpected:\n${difference.expected}\nActual:\n${difference.actual}")
+    if (difference != null) throw AssertionError("Diagnostic snapshot differs:\n${difference.message}")
   }
   expected.forEach { (kind, expectation) ->
     check(!expectation.missing) { "Missing ${kind.name} snapshot; enable recording to insert it." }

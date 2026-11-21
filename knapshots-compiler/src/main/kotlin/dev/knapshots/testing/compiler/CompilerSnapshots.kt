@@ -47,7 +47,7 @@ public fun assertCompilerSnapshots(
     if (difference != null) {
       throw AssertionError(
         "${kind.name} snapshot for Kotlin $compilerVersion differs.\n" +
-          "Expected:\n${difference.expected}\nActual:\n${difference.actual}",
+          "${difference.message}",
       )
     }
   }
@@ -114,7 +114,7 @@ public fun assertCompilerSnapshotFiles(
       if (expected != normalizedOutput) {
         throw AssertionError(
           "${kind.name} snapshot for Kotlin $compilerVersion ($selected) differs.\n" +
-            "Expected:\n$expected\nActual:\n$normalizedOutput",
+            "${checkNotNull(compareSnapshot(normalizedOutput, expected, textSnapshotting)).message}",
         )
       }
     }

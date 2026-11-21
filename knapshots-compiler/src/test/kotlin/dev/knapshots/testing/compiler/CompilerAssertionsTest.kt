@@ -29,6 +29,16 @@ class CompilerAssertionsTest {
     assertEquals(setOf(CompilerSnapshotKind.FIR), request?.captures)
   }
 
+  @Test fun `snapshot failure shows a focused diff`() {
+    val failure = assertFailsWith<AssertionError> {
+      assertCompiler("class Example", "2.4.21", CompilerHost {
+        CompilerResult(succeeded = true, captures = mapOf(CompilerSnapshotKind.FIR to "first\nactual\nlast"))
+      }) { fir("first\nexpected\nlast") }
+    }
+    assertContains(failure.message.orEmpty(), "− expected\n+ actual")
+    assertContains(failure.message.orEmpty(), "@@ -1,3 +1,3 @@")
+  }
+
   @Test fun `expected failure rejects an unexpectedly successful compilation`() {
     val failure = assertFailsWith<AssertionError> {
       assertCompiler("class Example", "2.4.21", CompilerHost { CompilerResult(succeeded = true) }) {

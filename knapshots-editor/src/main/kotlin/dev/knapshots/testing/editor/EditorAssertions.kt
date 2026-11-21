@@ -253,10 +253,10 @@ public class EditorExpectations internal constructor(
         return
       }
       if (sourceSnapshot == null) throw AssertionError("Missing source diagnostic snapshot; enable recording to insert it.")
-      if (difference != null) failures += "Source diagnostic snapshot differs:\nExpected:\n${difference.expected}\nActual:\n${difference.actual}"
+      if (difference != null) failures += "Source diagnostic snapshot differs:\n${difference.message}"
     } else if (expectedSnapshot != null) {
       val difference = compareSnapshot(actual, expectedSnapshot, diagnosticSnapshotting)
-      if (difference != null) failures += "Diagnostic snapshot differs:\nExpected:\n${difference.expected}\nActual:\n${difference.actual}"
+      if (difference != null) failures += "Diagnostic snapshot differs:\n${difference.message}"
     } else {
       // Find a one-to-one match even when a broad expected message overlaps a more specific one.
       val owner = IntArray(actual.size) { -1 }
@@ -381,7 +381,7 @@ public class QuickFixExpectations internal constructor(
         if (dev.knapshots.testing.snapshot.shouldRecordSnapshot(recording, expected == null, expected == null || difference != null)) {
           updates += editorSnapshotUpdate(checkNotNull(location), actual, "fixedSource")
         } else if (expected == null) failures += "Missing fixedSource snapshot for '${request.description}'; enable recording."
-        else if (difference != null) failures += "Fixed source for '${request.description}' differs:\nExpected:\n${difference.expected}\nActual:\n${difference.actual}"
+        else if (difference != null) failures += "Fixed source for '${request.description}' differs:\n${difference.message}"
       }
     }
   }
