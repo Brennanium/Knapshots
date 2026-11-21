@@ -23,7 +23,8 @@ gradlePlugin {
 val knapshotsVersion = project.version.toString()
 tasks.processResources {
   inputs.property("knapshotsVersion", knapshotsVersion)
-  expand(mapOf("knapshotsVersion" to knapshotsVersion))
+  inputs.property("kspVersion", libs.versions.ksp.get())
+  expand(mapOf("knapshotsVersion" to knapshotsVersion, "kspVersion" to libs.versions.ksp.get()))
 }
 
 tasks.test {

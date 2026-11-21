@@ -14,7 +14,27 @@ import dev.knapshots.testing.ksp.assertKsp
 
 The first run records generated source and diagnostics inline, then fails so you can review and rerun. Missing snapshots record by default. Use `record = SnapshotRecording.NONE` to compare without writing, or select `failed` or `all` for re-recording. The Knapshots Gradle plugin's `recording` setting applies to compiler, KSP, and editor assertions together. `generated(SnapshotExpectation(...))` supports compiler-version overrides, as does the existing `generated = SnapshotExpectation(...)` parameter. Set `knapshots.ksp.recordVersion=true` to record a version-specific override for an existing default snapshot.
 
-Configure the test JVM once with `knapshots.ksp.version`, `knapshots.ksp.processorClasspath`, and `knapshots.ksp.classpath`. The classpath values use the host platform's path separator. Include the processor and all of its runtime dependencies on the processor classpath; put types imported by test sources on the compilation classpath. The Kotlin compiler version defaults to the compiler bundled with Knapshots and can be overridden with `knapshots.ksp.kotlinVersion`. Alternatively, register one `KspHostProvider` service or pass a `GradleKspHost` explicitly.
+Apply the Knapshots Gradle plugin in the processor project. If the project declares a standard `SymbolProcessorProvider` service in `src/main/resources/META-INF/services`, Knapshots uses its JAR and runtime dependencies automatically. It also supplies Gradle TestKit and uses the test runtime classpath for types imported by the snippet.
+
+If the processor is in a different project, or its service is generated instead of declared in the standard location, provide its artifact and runtime dependencies explicitly:
+
+```kotlin
+val processorUnderTest by configurations.creating
+
+dependencies {
+  add(processorUnderTest.name, project(":processor"))
+}
+
+knapshots {
+  ksp {
+    processorClasspath.from(processorUnderTest)
+  }
+}
+```
+
+Knapshots takes the KSP version from `libs.versions.ksp` when available, otherwise it uses the version tested with Knapshots. Set `version` inside `ksp { ... }` to override it. The test Kotlin version comes from `libs.versions.kotlin` when available, otherwise it uses Knapshots' compiler version.
+
+For a custom integration, register one `KspHostProvider` service or pass a `GradleKspHost` explicitly. The `knapshots.ksp.version`, `knapshots.ksp.processorClasspath`, and `knapshots.ksp.classpath` system properties remain available when configuring a host without the Gradle plugin.
 
 For an outcome-only test, use `fails()` or `succeeds()`. To record only diagnostics, use the same diagnostics DSL as compiler and editor tests:
 

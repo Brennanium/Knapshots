@@ -1,0 +1,75 @@
+site_name: Knapshots
+site_description: Snapshot, compiler plugin, and editor testing for Kotlin.
+site_dir: build/docs/site
+repo_name: Brennanium/Knapshots
+repo_url: https://github.com/Brennanium/Knapshots
+edit_uri: edit/main/docs/
+theme:
+  name: material
+  font:
+    text: Inter
+    code: JetBrains Mono
+  palette:
+    - media: '(prefers-color-scheme)'
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: '(prefers-color-scheme: light)'
+      scheme: default
+      primary: white
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: '(prefers-color-scheme: dark)'
+      scheme: slate
+      primary: black
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  features:
+    - content.action.edit
+    - content.code.copy
+    - content.code.select
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.footer
+    - navigation.top
+    - search.suggest
+    - search.highlight
+plugins:
+  - search
+extra_css:
+  - assets/stylesheets/site.css
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+nav:
+  - Overview: index.md
+  - Getting started: GETTING-STARTED.md
+  - Guides:
+      - Snapshot testing: SNAPSHOTS.md
+      - Compiler plugins: COMPILER.md
+      - Editor behavior: EDITOR.md
+      - Compiler and editor details: PLUGIN-TESTING.md
+      - Testing KSP processors: KSP-TESTING.md
+      - Compatibility testing: COMPATIBILITY.md
+  - Development:
+      - Architecture: ARCHITECTURE.md
+      - Test fixtures and coverage: TEST-FIXTURES.md
+  - API reference: api/index.md

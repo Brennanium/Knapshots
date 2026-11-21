@@ -10,6 +10,8 @@ import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.TaskAction
@@ -22,7 +24,7 @@ public abstract class CollectEditorScenarioTask : DefaultTask() {
   init { outputs.upToDateWhen { false } }
 
   @get:Input public abstract val scenario: Property<String>
-  @get:InputFile public abstract val junitXml: RegularFileProperty
+  @get:InputFile @get:PathSensitive(PathSensitivity.NONE) public abstract val junitXml: RegularFileProperty
   @get:OutputDirectory public abstract val outputDirectory: DirectoryProperty
 
   @Option(option = "scenario", description = "Name of the editor test scenario")

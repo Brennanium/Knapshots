@@ -19,6 +19,8 @@ import org.gradle.api.provider.Property
 import org.gradle.api.provider.MapProperty
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.Optional
@@ -32,9 +34,9 @@ public abstract class EditorCompatibilityTask : DefaultTask() {
   init { outputs.upToDateWhen { false } }
 
   @get:Input public abstract val ideVersion: Property<String>
-  @get:InputFile @get:Optional public abstract val driver: RegularFileProperty
-  @get:InputDirectory @get:Optional public abstract val idePath: DirectoryProperty
-  @get:InputFile @get:Optional public abstract val releaseFeed: RegularFileProperty
+  @get:InputFile @get:Optional @get:PathSensitive(PathSensitivity.ABSOLUTE) public abstract val driver: RegularFileProperty
+  @get:InputDirectory @get:Optional @get:PathSensitive(PathSensitivity.ABSOLUTE) public abstract val idePath: DirectoryProperty
+  @get:InputFile @get:Optional @get:PathSensitive(PathSensitivity.NONE) public abstract val releaseFeed: RegularFileProperty
   @get:Internal public abstract val ideCache: DirectoryProperty
   @get:Input public abstract val useKefs: Property<Boolean>
   @get:Input public abstract val driverEnvironment: MapProperty<String, String>

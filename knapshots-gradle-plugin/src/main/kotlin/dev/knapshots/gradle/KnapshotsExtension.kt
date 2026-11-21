@@ -6,6 +6,7 @@ import javax.inject.Inject
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.file.FileCollection
+import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.tasks.Classpath
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
@@ -41,6 +42,12 @@ public abstract class CompilerPluginConfiguration {
   public abstract val irOption: Property<String>
 }
 
+/** The processor under test and the KSP version used by temporary test projects. */
+public abstract class KspConfiguration {
+  public abstract val version: Property<String>
+  public abstract val processorClasspath: ConfigurableFileCollection
+}
+
 /** IDE-side integration; additional delivery mechanisms can be added alongside KEFS. */
 public abstract class IdePluginConfiguration @Inject constructor(objects: ObjectFactory) {
   public val kefs: KefsConfiguration = objects.newInstance(KefsConfiguration::class.java)
@@ -50,6 +57,8 @@ public abstract class IdePluginConfiguration @Inject constructor(objects: Object
 /** Project-wide settings for testing a Kotlin compiler plugin. */
 public abstract class KnapshotsExtension @Inject constructor(objects: ObjectFactory) {
   public val gradlePlugin: TargetPlugin = objects.newInstance(TargetPlugin::class.java)
+  public val ksp: KspConfiguration = objects.newInstance(KspConfiguration::class.java)
+  public fun ksp(action: Action<KspConfiguration>) { action.execute(ksp) }
   public val compilerPlugin: CompilerPluginConfiguration = objects.newInstance(CompilerPluginConfiguration::class.java)
   public fun compilerPlugin(action: Action<CompilerPluginConfiguration>) { action.execute(compilerPlugin) }
   public val idePlugin: IdePluginConfiguration = objects.newInstance(IdePluginConfiguration::class.java)
@@ -72,6 +81,7 @@ internal class EditorProjectArguments(
   config: KnapshotsExtension,
   @get:Classpath val testClasspath: FileCollection,
   @get:Classpath val recorderClasspath: FileCollection,
+  @get:Classpath val kspProcessorClasspath: FileCollection,
 ) : CommandLineArgumentProvider {
   // Keep only Gradle providers, not the decorated extension or its owning project.
   @get:Internal val editorValues = mapOf(
@@ -104,6 +114,8 @@ internal class EditorProjectArguments(
   @get:Internal val kspValues = mapOf(
     "record" to config.recording,
     "recordVersion" to config.recordCompilerVersion.map { it.toString() },
+    "version" to config.ksp.version,
+    "kotlinVersion" to config.kotlinVersion,
   )
   @get:Input val configurationArguments: List<String> get() =
     arguments("editor", editorValues) + arguments("compiler", compilerValues) + arguments("ksp", kspValues)
@@ -116,9 +128,13 @@ internal class EditorProjectArguments(
     val classpathArgs = if (classpath.isEmpty()) emptyList() else listOf(
       "-Dknapshots.editor.classpath=$classpath", "-Dknapshots.compiler.classpath=$classpath",
     )
+    val kspArgs = if (kspProcessorClasspath.files.isEmpty()) emptyList() else listOf(
+      "-Dknapshots.ksp.processorClasspath=" + kspProcessorClasspath.asPath,
+      "-Dknapshots.ksp.classpath=$classpath",
+    )
     val recorderArgs = if (recorderClasspath.files.isNotEmpty()) listOf(
       "-Dknapshots.editor.recorderClasspath=" + recorderClasspath.files.joinToString(java.io.File.pathSeparator) { it.absolutePath },
     ) else emptyList()
-    return configurationArguments + classpathArgs + recorderArgs
+    return configurationArguments + classpathArgs + recorderArgs + kspArgs
   }
 }

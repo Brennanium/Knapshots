@@ -30,7 +30,7 @@ Configure the compiler plugin once in Gradle. The artifact is the plugin JAR und
 ```kotlin
 knapshots {
   compilerPlugin {
-    artifact.set(layout.projectDirectory.file("build/libs/example-compiler-plugin.jar"))
+    artifact.set(tasks.named<Jar>("jar").flatMap { it.archiveFile })
     id.set("example.compiler-plugin")
     firOption.set("firSnapshot")
     irOption.set("irSnapshot")
@@ -203,36 +203,10 @@ Both implement `CompilerHost`, so either can drive `assertCompiler`. Configure a
 
 This optional adapter is a separate build because it compiles against a selected IDE. From a Knapshots checkout, `./gradlew -p knapshots-intellij-fixture test -Pknapshots.idePath=/path/to/ide` verifies it without launching a full IDE. A composite consumer can include the Knapshots build and `knapshots-intellij-fixture`, then depend on `dev.knapshots:knapshots-intellij-fixture`. These lightweight tests do not prove Gradle import, KEFS loading, or full IDE behavior.
 
-### Quick fixes in a light fixture
+### Quick fixes
 
-A single diagnostic can offer several quick fixes. Assert each fix by its displayed description and compare the source it produces:
-
-```kotlin
-assertEditor(source) {
-  quickFix("Create local variable") {
-    fixedSource()
-  }
-  quickFix("Create field") {
-    fixedSource()
-  }
-}
-```
-
-With recording enabled, Knapshots records each `fixedSource()` and the source diagnostics. Each fix starts from the original source, and all snapshots are written together. Specify `line = 2` on `quickFix` when the same description appears at more than one diagnostic; missing or ambiguous matches fail. You can also assert the diagnostics explicitly using `diagnostics { ... }`.
-
-This is an initial light-fixture implementation: it discovers intentions at diagnostic locations and snapshots the primary source only. Multi-file fixes and the imported-project editor host are not supported yet. Quick-fix labels and formatting can change between IDE versions; top-level `versioned` blocks can select different expectations.
+The lightweight IntelliJ fixture can check and record the results of quick fixes. See [Testing editor behavior](EDITOR.md#check-a-quick-fix) for an example and the current limitations.
 
 ### Reading snapshot failures
 
-Text snapshot failures show the changed lines with nearby context. The hunk header gives line numbers for the expected and actual snapshots:
-
-```diff
-− expected / + actual
-@@ -1,3 +1,3 @@
-  class Person {
-−   val name: String
-+   var name: String
-  }
-```
-
-Trailing spaces appear as `·`, trailing tabs as `⇥`, and carriage returns as `␍`. A missing final newline is called out separately. This format is shared by compiler, KSP, editor, and text snapshot assertions. For exceptionally large changed sections, Knapshots bounds the comparison work and may show the whole changed section instead of a minimal diff.
+[Snapshot testing](SNAPSHOTS.md) explains the line diff shown when text snapshots change.

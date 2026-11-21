@@ -17,6 +17,7 @@ class EditorCompatibilityPluginTest {
       knapshots {
         recording.set("missing")
         recordCompilerVersion.set(true)
+        ksp { processorClasspath.from(files("compiler.jar")) }
         compilerPlugin {
           artifact.set(layout.projectDirectory.file("compiler.jar"))
           id.set("example.compiler-plugin")
@@ -104,6 +105,46 @@ class EditorCompatibilityPluginTest {
     """.trimIndent())
     GradleRunner.create().withProjectDir(dir.toFile()).withPluginClasspath()
       .withArguments("inspectTestConfiguration").build()
+  }
+
+  @Test fun `infers compiler plugin artifact from its registrar service`(@TempDir dir: Path) {
+    Files.writeString(dir.resolve("settings.gradle.kts"), "rootProject.name = \"consumer\"")
+    val service = dir.resolve("src/main/resources/META-INF/services/org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar")
+    Files.createDirectories(service.parent)
+    Files.writeString(service, "fixture.Registrar")
+    Files.writeString(dir.resolve("build.gradle.kts"), """
+      plugins { java; id("dev.knapshots.compatibility") }
+      tasks.register("probeCompiler") { dependsOn("jar"); doLast {
+        val args = tasks.named<Test>("test").get().jvmArgumentProviders.flatMap { it.asArguments() }
+        check(args.any { it.startsWith("-Dknapshots.compiler.pluginJar=") && it.endsWith("consumer.jar") })
+      } }
+    """.trimIndent())
+    GradleRunner.create().withProjectDir(dir.toFile()).withPluginClasspath().withArguments("probeCompiler").build()
+  }
+
+  @Test fun `KSP uses catalog version and explicit configuration wins`(@TempDir dir: Path) {
+    Files.writeString(dir.resolve("settings.gradle.kts"), "rootProject.name = \"consumer\"")
+    Files.createDirectories(dir.resolve("gradle"))
+    Files.writeString(dir.resolve("gradle/libs.versions.toml"), "[versions]\nkotlin = \"2.4.21\"\nksp = \"2.3.10\"\n")
+    Files.writeString(dir.resolve("processor.jar"), "processor")
+    val service = dir.resolve("src/main/resources/META-INF/services/com.google.devtools.ksp.processing.SymbolProcessorProvider")
+    Files.createDirectories(service.parent)
+    Files.writeString(service, "fixture.Provider")
+    fun run(override: String, expected: String) {
+      Files.writeString(dir.resolve("build.gradle.kts"), """
+        plugins { java; id("dev.knapshots.compatibility") }
+        knapshots { ksp { processorClasspath.from(files("processor.jar")); $override } }
+        tasks.register("probeKsp") { doLast {
+          val args = tasks.named<Test>("test").get().jvmArgumentProviders.flatMap { it.asArguments() }
+          check("-Dknapshots.ksp.version=$expected" in args)
+          check("-Dknapshots.ksp.kotlinVersion=2.4.21" in args)
+          check(args.any { it.startsWith("-Dknapshots.ksp.processorClasspath=") && it.endsWith("processor.jar") })
+        } }
+      """.trimIndent())
+      GradleRunner.create().withProjectDir(dir.toFile()).withPluginClasspath().withArguments("probeKsp").build()
+    }
+    run("", "2.3.10")
+    run("version.set(\"2.3.12\")", "2.3.12")
   }
 
   @Test fun `editor recording configures an isolated worker classpath`(@TempDir dir: Path) {

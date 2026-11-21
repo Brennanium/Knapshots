@@ -14,6 +14,8 @@ import org.gradle.api.provider.Property
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.MapProperty
 import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.Optional
@@ -21,6 +23,7 @@ import org.gradle.api.tasks.OutputFile
 import groovy.json.JsonOutput
 import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.testing.Test
+import org.gradle.jvm.tasks.Jar
 import org.gradle.api.artifacts.VersionCatalogsExtension
 import org.gradle.plugin.devel.GradlePluginDevelopmentExtension
 import org.gradle.api.tasks.options.Option
@@ -61,6 +64,7 @@ public class KnapshotsCompatibilityPlugin : Plugin<Project> {
     editorProject.recording.convention(project.providers.gradleProperty("knapshots.recording"))
     editorProject.recordCompilerVersion.convention(project.providers.gradleProperty("knapshots.recordCompilerVersion").map { it.toBooleanStrict() })
     editorProject.wrapperRoot.convention(project.rootProject.layout.projectDirectory)
+    editorProject.ksp.version.convention(versionProperties.getProperty("kspVersion"))
     // Resolve project-derived defaults after the build script configures its plugins. Store values,
     // not Project objects, in the test argument provider so configuration caching remains possible.
     project.afterEvaluate {
@@ -72,25 +76,57 @@ public class KnapshotsCompatibilityPlugin : Plugin<Project> {
       project.extensions.findByType(VersionCatalogsExtension::class.java)?.find("libs")?.orElse(null)
         ?.findVersion("kotlin")?.orElse(null)?.requiredVersion?.takeIf(String::isNotBlank)
         ?.let { editorProject.kotlinVersion.convention(it) }
+      // The applied Kotlin plugin is authoritative even when no version catalog is present.
+      kotlinGradlePluginVersion(project)?.let { editorProject.kotlinVersion.convention(it) }
+      project.extensions.findByType(VersionCatalogsExtension::class.java)?.find("libs")?.orElse(null)
+        ?.findVersion("ksp")?.orElse(null)?.requiredVersion?.takeIf(String::isNotBlank)
+        ?.let { editorProject.ksp.version.convention(it) }
       editorProject.gradlePlugin.id.orNull?.let { id ->
         compilerPluginArtifact(project, id)?.let { editorProject.idePlugin.kefs.idePlugin.convention(it) }
         project.plugins.findPlugin(id)?.let { plugin ->
           compilerPluginId(plugin)?.let { editorProject.compilerPlugin.id.convention(it) }
         }
       }
+      // A compiler plugin declared in this project can be tested without spelling its JAR path.
+      val compilerService = project.layout.projectDirectory.file(
+        "src/main/resources/META-INF/services/org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar",
+      ).asFile
+      if (compilerService.isFile && project.tasks.findByName("jar") is Jar) {
+        editorProject.compilerPlugin.artifact.convention(project.tasks.named("jar", Jar::class.java).flatMap { it.archiveFile })
+      }
+      // A standard service descriptor is unambiguous evidence that this project builds a KSP
+      // processor. Prefer an explicit selection if the user already configured one.
+      val processorService = project.layout.projectDirectory.file(
+        "src/main/resources/META-INF/services/com.google.devtools.ksp.processing.SymbolProcessorProvider",
+      ).asFile
+      if (processorService.isFile && editorProject.ksp.processorClasspath.from.isEmpty() && project.tasks.findByName("jar") is Jar) {
+        editorProject.ksp.processorClasspath.from(project.tasks.named("jar"))
+        project.configurations.findByName("runtimeClasspath")?.let { editorProject.ksp.processorClasspath.from(it) }
+      }
       val editorDeclared = project.configurations.filter { it.name.endsWith("RuntimeClasspath") }.any { configuration ->
         configuration.allDependencies.any { dependency ->
           dependency.group == "dev.knapshots" && (dependency.name.startsWith("knapshots-editor") || dependency.name == "knapshots-intellij-fixture")
+        }
+      }
+      // Gradle TestKit is distributed with Gradle, not through the published host artifacts.
+      // Supply it when the consumer uses one of the Gradle-backed compiler or KSP hosts.
+      project.configurations.filter { it.name.endsWith("RuntimeClasspath") }.forEach { configuration ->
+        val usesGradleHost = configuration.allDependencies.any { dependency ->
+          dependency.group == "dev.knapshots" && (dependency.name == "knapshots-ksp" || dependency.name == "knapshots-compiler-gradle")
+        }
+        val runtimeOnly = configuration.name.removeSuffix("RuntimeClasspath") + "RuntimeOnly"
+        if (usesGradleHost && project.configurations.findByName(runtimeOnly) != null) {
+          project.dependencies.add(runtimeOnly, project.dependencies.gradleTestKit())
         }
       }
       // A test may opt in per assertion at runtime, so make the isolated worker available even
       // when no project-wide recording mode has been selected.
       val recordingFiles = if (editorDeclared) project.files(recorder) else project.files()
       project.tasks.withType(Test::class.java).configureEach { task ->
-        task.jvmArgumentProviders.add(EditorProjectArguments(editorProject, task.classpath, recordingFiles))
+        task.jvmArgumentProviders.add(EditorProjectArguments(editorProject, task.classpath, recordingFiles, editorProject.ksp.processorClasspath))
       }
     }
-    editorProject.runnerRoot.convention(project.layout.dir(project.providers.gradleProperty("knapshots.ideRunnerRoot").map(::File)))
+    editorProject.runnerRoot.convention(project.layout.dir(project.providers.gradleProperty("knapshots.ideRunnerRoot").orElse(project.providers.environmentVariable("KNAPSHOTS_CHECKOUT")).map(::File)))
     editorProject.idePath.convention(project.layout.dir(
       project.providers.gradleProperty("knapshots.idePath").orElse(project.providers.environmentVariable("KNAPSHOTS_IDE_PATH")).map(::File),
     ))
@@ -150,6 +186,7 @@ public abstract class CompilerCompatibilityTask : DefaultTask() {
 
   @get:InputFile
   @get:Optional
+  @get:PathSensitive(PathSensitivity.ABSOLUTE)
   public abstract val driver: RegularFileProperty
 
   @get:Input public abstract val platforms: ListProperty<String>
@@ -206,6 +243,19 @@ public abstract class CompilerCompatibilityTask : DefaultTask() {
   }
 }
 
+
+/** Read the actual applied Kotlin plugin version without requiring a version catalog. */
+internal fun kotlinGradlePluginVersion(project: Project): String? {
+  val plugin = project.plugins.findPlugin("org.jetbrains.kotlin.jvm") ?: return null
+  return try {
+    val wrapper = Class.forName("org.jetbrains.kotlin.gradle.plugin.KotlinPluginWrapperKt", false, plugin.javaClass.classLoader)
+    (wrapper.getMethod("getKotlinPluginVersion", Project::class.java).invoke(null, project) as? String)?.takeIf(String::isNotBlank)
+  } catch (_: ReflectiveOperationException) {
+    null
+  } catch (_: LinkageError) {
+    null
+  }
+}
 
 /** Reads metadata only from an already-applied Kotlin compiler support plugin. */
 private fun compilerPluginArtifact(project: Project, id: String): String? {
