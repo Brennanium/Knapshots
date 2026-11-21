@@ -91,6 +91,7 @@ public class GradleEditorHostProvider : EditorHostProvider {
     return RunnerEditorSourceHost(template, preparedLauncher,
       ideBuild = installedIdeBuild(ide),
       temporaryParent = optional("temporaryParent")?.let { Files.createDirectories(Path.of(it)) },
+      retention = optional("retention")?.let(EditorProjectRetention::valueOf) ?: EditorProjectRetention.ON_FAILURE,
       reportDirectory = optional("reportDirectory")?.let(Path::of),
       failureReportFiles = listOf(
         "nested-build/knapshots-intellij/editor-inspection-sandbox/log/idea.log",

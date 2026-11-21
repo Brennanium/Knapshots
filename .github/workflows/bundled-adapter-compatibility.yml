@@ -74,6 +74,7 @@ jobs:
           KNAPSHOTS_VERSION: 0.1.0-ci
           IDE_VERSION: ${{ matrix.ide }}
           KNAPSHOTS_FIXTURE_TRACE: 'true'
+          KNAPSHOTS_RETAIN_IDE_LOGS: 'true'
           KNAPSHOTS_EXPERIMENTAL_REFRESH_PSI: ${{ matrix.ide == '2026.1.4.8' && 'true' || 'false' }}
           JAVA_TOOL_OPTIONS: -Didea.log.debug.categories=com.github.mr3zee.kefs
         run: |
@@ -88,6 +89,7 @@ jobs:
             knapshots/ci/bundled-adapter-smoke/build/reports/
             knapshots/ci/bundled-adapter-smoke/build/test-results/
             knapshots/ci/bundled-adapter-smoke/build/fixture-repository/
+            knapshots/ci/bundled-adapter-smoke/build/editor-inspections/**/ide-sandbox/log/idea.log
             knapshots/ci/bundled-adapter-smoke/build/editor-inspections/**/project/build.gradle.kts
             knapshots/ci/bundled-adapter-smoke/build/editor-inspections/**/project/settings.gradle.kts
             knapshots/ci/bundled-adapter-smoke/build/editor-inspections/**/project/.idea/kotlin-plugins.xml

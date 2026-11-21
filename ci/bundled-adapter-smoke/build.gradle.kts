@@ -25,6 +25,9 @@ dependencies {
 tasks.test {
   useJUnitPlatform()
   systemProperty("knapshots.editor.preflightGradle", "true")
+  if (System.getenv("KNAPSHOTS_RETAIN_IDE_LOGS") == "true") {
+    systemProperty("knapshots.editor.retention", "ALWAYS")
+  }
   systemProperty("knapshots.editor.temporaryParent", layout.buildDirectory.dir("editor-inspections").get().asFile.absolutePath)
   systemProperty("knapshots.editor.reportDirectory", layout.buildDirectory.dir("reports/editor-inspections").get().asFile.absolutePath)
 }
