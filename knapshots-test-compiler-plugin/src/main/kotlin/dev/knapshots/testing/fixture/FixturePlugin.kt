@@ -59,6 +59,11 @@ import org.jetbrains.kotlin.ir.expressions.IrConst
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 
 private const val ID = "dev.knapshots.fixture"
+
+// Opt-in diagnostics for editor integration tests; never emitted in ordinary compiler tests.
+private fun fixtureTrace(message: String) {
+  if (System.getenv("KNAPSHOTS_FIXTURE_TRACE") == "true") System.err.println("[knapshots-fixture] $message")
+}
 private val FIR = CompilerConfigurationKey.create<String>("fixture.fir")
 private val IR = CompilerConfigurationKey.create<String>("fixture.ir")
 private val DIAGNOSTIC = CompilerConfigurationKey.create<String>("fixture.diagnostic")
@@ -79,6 +84,7 @@ public class FixtureRegistrar : CompilerPluginRegistrar() {
   override val pluginId: String = ID
   override val supportsK2: Boolean = true
   override fun ExtensionStorage.registerExtensions(configuration: CompilerConfiguration) {
+    fixtureTrace("registering compiler extensions")
     FirExtensionRegistrarAdapter.registerExtension(FixtureFirRegistrar(configuration.get(FIR)))
     configuration.get(DIAGNOSTIC)?.let { message ->
       configuration.get(CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY)?.report(CompilerMessageSeverity.WARNING, message)
@@ -107,7 +113,10 @@ private class FixtureDeclarations(session: FirSession) : FirDeclarationGeneratio
 
   override fun getCallableNamesForClass(classSymbol: FirClassSymbol<*>, context: DeclarationGenerationContext.Member): Set<Name> =
     buildSet {
-      if (session.predicateBasedProvider.matches(addMember, classSymbol)) add(generatedName)
+      if (session.predicateBasedProvider.matches(addMember, classSymbol)) {
+        fixtureTrace("generating member for ${classSymbol.classId}")
+        add(generatedName)
+      }
       if (session.predicateBasedProvider.matches(addProperty, classSymbol)) add(propertyName)
     }
 

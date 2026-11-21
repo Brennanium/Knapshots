@@ -89,6 +89,7 @@ public class EditorInspectionActivity : ProjectActivity {
     val deadline = System.currentTimeMillis() + READY_TIMEOUT_MILLIS
     var lastPending = "waiting for project import and indexing"
     var lastHighlightRestart = 0L
+    var experimentalLastPsiRefresh = 0L
     while (System.currentTimeMillis() < deadline && !project.isDisposed) {
       delay(POLL_INTERVAL_MILLIS)
       if (DumbService.isDumb(project)) {
@@ -99,6 +100,23 @@ public class EditorInspectionActivity : ProjectActivity {
         lastHighlightRestart = System.currentTimeMillis()
         restartHighlighting(project, sourcePaths)
         lastPending = "waiting for editor highlighting"
+        continue
+      }
+      // Diagnostic-only experiment: keep normal adapter behavior unchanged while testing
+      // whether Quail needs a PSI refresh after an IDE compiler plugin is loaded.
+      if (lastPending.startsWith("waiting for readiness reference") &&
+        System.currentTimeMillis() - experimentalLastPsiRefresh >= 20_000 &&
+        System.getenv("KNAPSHOTS_EXPERIMENTAL_REFRESH_PSI") == "true") {
+        experimentalLastPsiRefresh = System.currentTimeMillis()
+        ApplicationManager.getApplication().invokeLater {
+          if (!project.isDisposed) {
+            logger.info("Experimental PSI cache invalidation")
+            PsiManager.getInstance(project).dropPsiCaches()
+            restartHighlighting(project, sourcePaths)
+          }
+        }
+        lastHighlightRestart = System.currentTimeMillis()
+        lastPending = "waiting for editor highlighting after experimental PSI refresh"
         continue
       }
       when (val attempt = inspectWhenReady(project, sourcePaths, request)) {

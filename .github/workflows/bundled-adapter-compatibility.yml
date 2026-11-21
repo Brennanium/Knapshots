@@ -73,6 +73,9 @@ jobs:
           KNAPSHOTS_REPOSITORY: ${{ github.workspace }}/knapshots/build/consumer-repository
           KNAPSHOTS_VERSION: 0.1.0-ci
           IDE_VERSION: ${{ matrix.ide }}
+          KNAPSHOTS_FIXTURE_TRACE: 'true'
+          KNAPSHOTS_EXPERIMENTAL_REFRESH_PSI: ${{ matrix.ide == '2026.1.4.8' && 'true' || 'false' }}
+          JAVA_TOOL_OPTIONS: -Didea.log.debug.categories=com.github.mr3zee.kefs
         run: |
           export GRADLE_OPTS="-Dorg.gradle.java.installations.paths=$KNAPSHOTS_JDK25"
           knapshots/gradlew -p knapshots/ci/bundled-adapter-matrix editorCompatibility --ide-version "$IDE_VERSION" --no-configuration-cache
@@ -84,5 +87,9 @@ jobs:
             knapshots/ci/bundled-adapter-matrix/build/reports/knapshots/
             knapshots/ci/bundled-adapter-smoke/build/reports/
             knapshots/ci/bundled-adapter-smoke/build/test-results/
+            knapshots/ci/bundled-adapter-smoke/build/fixture-repository/
+            knapshots/ci/bundled-adapter-smoke/build/editor-inspections/**/project/build.gradle.kts
+            knapshots/ci/bundled-adapter-smoke/build/editor-inspections/**/project/settings.gradle.kts
+            knapshots/ci/bundled-adapter-smoke/build/editor-inspections/**/project/.idea/kotlin-plugins.xml
           if-no-files-found: warn
           include-hidden-files: true
