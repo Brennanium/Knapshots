@@ -1,8 +1,6 @@
 name: Bundled adapter compatibility
 
 on:
-  push:
-    branches: [feature/bundled-adapter-matrix]
   workflow_dispatch:
     inputs:
       ide_versions:
@@ -37,7 +35,7 @@ jobs:
         env:
           KNAPSHOTS_CHECKOUT: ${{ github.workspace }}
           KNAPSHOTS_VERSION: 0.1.0-ci
-          BASELINE_IDE: ${{ inputs.baseline_ide || '2026.1.4.8' }}
+          BASELINE_IDE: ${{ inputs.baseline_ide }}
         run: |
           export GRADLE_OPTS="-Dorg.gradle.java.installations.paths=$KNAPSHOTS_JDK25"
           ./gradlew -p ci/bundled-adapter-build-matrix editorCompatibility --ide-version "$BASELINE_IDE" --no-configuration-cache
@@ -54,14 +52,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ide: ${{ fromJSON(inputs.ide_versions || '["2026.2.2.10", "2026.2.1.8", "2026.1.4.8"]') }}
+        ide: ${{ fromJSON(inputs.ide_versions) }}
     steps:
       - uses: actions/checkout@v6
         with: { path: knapshots }
       - uses: actions/checkout@v6
         with:
           repository: Brennanium/KPaths
-          ref: ${{ inputs.kpaths_ref || 'ci/ide-compatibility/knapshots-integration' }}
+          ref: ${{ inputs.kpaths_ref }}
           path: kpaths
       - uses: actions/download-artifact@v7
         with:
@@ -96,5 +94,14 @@ jobs:
             knapshots/ci/bundled-adapter-matrix/build/reports/knapshots/
             knapshots/ci/bundled-adapter-consumer/build/reports/tests/
             knapshots/ci/bundled-adapter-consumer/build/test-results/
+            knapshots/ci/bundled-adapter-consumer/build/reports/editor-inspections/
+            knapshots/ci/bundled-adapter-consumer/build/editor-inspections/**/project/build.gradle.kts
+            knapshots/ci/bundled-adapter-consumer/build/editor-inspections/**/project/settings.gradle.kts
+            knapshots/ci/bundled-adapter-consumer/build/editor-inspections/**/project/.idea/gradle.xml
+            knapshots/ci/bundled-adapter-smoke/build/reports/
+            knapshots/ci/bundled-adapter-smoke/build/test-results/
+            kpaths/kpaths-kefs-ide-fixture/build/reports/tests/
+            kpaths/kpaths-kefs-ide-fixture/build/test-results/
             kpaths/kpaths-kefs-ide-fixture/build/consumer-probe*.log
           if-no-files-found: warn
+          include-hidden-files: true

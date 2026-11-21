@@ -86,13 +86,16 @@ public class GradleEditorHostProvider : EditorHostProvider {
       ) },
       timeout = Duration.ofMinutes(12), environment = mapOf("JAVA_HOME" to javaHome.toString()),
     )
-    return RunnerEditorSourceHost(template, launcher,
+    val preparedLauncher = if (optional("preflightGradle")?.toBooleanStrict() == true)
+      GradlePreflightLauncher(launcher, javaHome) else launcher
+    return RunnerEditorSourceHost(template, preparedLauncher,
       ideBuild = installedIdeBuild(ide),
       temporaryParent = optional("temporaryParent")?.let { Files.createDirectories(Path.of(it)) },
       reportDirectory = optional("reportDirectory")?.let(Path::of),
       failureReportFiles = listOf(
         "nested-build/knapshots-intellij/editor-inspection-sandbox/log/idea.log",
         "ide-sandbox/log/idea.log",
+        "project/.knapshots/gradle-preflight.log",
       ),
     )
   }

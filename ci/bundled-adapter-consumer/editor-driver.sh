@@ -15,6 +15,11 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 : "${ide:?Missing IDE path}" "${kotlin:?Missing IDE Kotlin version}" "${kefs:?Missing KEFS version}"
+# Exercise the bundled adapter before the independent KPaths fixture preparation. This
+# distinguishes adapter compatibility from KPaths compiler-plugin or KEFS failures.
+export KNAPSHOTS_IDE_PATH="$ide" KNAPSHOTS_WRAPPER_ROOT="$KNAPSHOTS_CHECKOUT"
+"$KNAPSHOTS_CHECKOUT/gradlew" -p "$KNAPSHOTS_CHECKOUT/ci/bundled-adapter-smoke" test \
+  "-PknapshotsVersion=${KNAPSHOTS_VERSION:-0.1.0}" --no-configuration-cache
 python3 "$KPATHS_CHECKOUT/scripts/verify-kefs-compatibility.py" \
   --ide-path "$ide" --ide-kotlin-version "$kotlin" --kefs-version "$kefs" --allow-untested-combination
 export KNAPSHOTS_IDE_PATH="$ide" KNAPSHOTS_KEFS_VERSION="$kefs"
